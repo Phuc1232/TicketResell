@@ -114,13 +114,13 @@ d. Chức năng cho Cổng thanh toán:
 <img width="787" height="723" alt="image" src="https://github.com/user-attachments/assets/e0ff6402-9589-4ead-8343-21a3b52b2673" />
 <p align="center">
 Hình 2- Biểu đồ  use case tổng quan 
-<\p>
+</p>
   
 # 2.4 Luồng xử lý
 <img width="1182" height="607" alt="image" src="https://github.com/user-attachments/assets/3d217957-a28c-4718-9c3b-7e33f7a7eec8" />
 <p align="center">
 Hình 4 -Biểu đồ luồng xử lý
-<\p>
+</p>
   
 # 2.5 Luồng xử lý chi tiết
 
@@ -128,25 +128,25 @@ Hình 4 -Biểu đồ luồng xử lý
 <img width="954" height="624" alt="image" src="https://github.com/user-attachments/assets/ee215097-ab0b-450a-b742-38e5ed188d8e" />
 <p align="center">
 Hình 5 - Biểu đồ đăng ký 
-<\p>
+</p>
   
 # 2.5.2 Luồng xử lý mua vé
 <img width="1068" height="789" alt="image" src="https://github.com/user-attachments/assets/54260047-f8ea-4728-b987-a36311a9acf4" />
 <p align="center">
 Hình 6 - Biểu đồ mua vé 
-<\p>
+</p>
   
 # 2.5.3 Luồng xử lý bán vé 
 <img width="1190" height="774" alt="image" src="https://github.com/user-attachments/assets/738f0487-fa91-40a2-8c5b-6d38b3bd6ab7" />
 <p aligb="center">
 Hình 7 - Biểu đồ bán vé 
-<\p> 
+</p> 
 
 # 2.5.4 Luồng xử quản lý vé
 <img width="1015" height="722" alt="image" src="https://github.com/user-attachments/assets/e330f2ad-a73e-4c58-9372-ba1cfa082ac8" />
 <p align="center">
 Hình 8 - Biểu đồ quản lý vé 
-<\p>
+</p>
 
 # 2.6 Thiết kế cơ sỡ dữ liệu
 
@@ -154,13 +154,13 @@ Hình 8 - Biểu đồ quản lý vé
 <img width="1527" height="759" alt="image" src="https://github.com/user-attachments/assets/93bd9d25-6755-47e8-8194-14d29d659306" />
 <p align="center">
 Hình 9 - Biểu đồ ERD
-<\p>
+</p>
 
 # 2.6.2 Mô hình cơ sở dữ liệu 
 <img width="1186" height="739" alt="image" src="https://github.com/user-attachments/assets/6027aeb3-3ec9-4ea8-a13b-f587ec64311d" />
 <p align="center">
 Hình 10 - Biểu đồ cơ sở dữ liệu
-<\p>
+</p>
 
 # III.Yêu cầu phi chức năng
 
