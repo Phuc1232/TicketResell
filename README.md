@@ -138,7 +138,7 @@ Hình 6 - Biểu đồ mua vé
   
 # 2.5.3 Luồng xử lý bán vé 
 <img width="1190" height="774" alt="image" src="https://github.com/user-attachments/assets/738f0487-fa91-40a2-8c5b-6d38b3bd6ab7" />
-<p aligb="center">
+<p align="center">
 Hình 7 - Biểu đồ bán vé 
 </p> 
 
