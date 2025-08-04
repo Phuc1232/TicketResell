@@ -162,7 +162,118 @@ Hình 9 - Biểu đồ ERD
 Hình 10 - Biểu đồ cơ sở dữ liệu
 </p>
 
-# III.Yêu cầu phi chức năng
+# III. Yêu cầu phi chức năng
+
+# 1. Hiệu suất 
+- Thời gian tải trang & phản hồi API: không quá 3 giây thời gian phản hồi không quá 1 giây là hợp lý. Đặc biệt quan trọng trong các trang tìm kiếm sự kiện và chi tiết vé.
+
+- Hỗ trợ đồng thời (Concurrency): ít nhất 30 người dùng là quá thấp. Một sự kiện có thể thu hút hàng nghìn hoặc chục nghìn người dùng đồng thời tại thời điểm mở bán hoặc ngay trước giờ diễn ra.
+
+- Đề xuất: Hệ thống phải chịu tải được ít nhất 5,000 người dùng đồng thời trong các thời điểm cao điểm (flash sale, sự kiện lớn). Cần có cơ chế "hàng đợi"  ảo để tránh sập hệ thống.
+
+- Tối ưu hóa: Rất quan trọng. Bổ sung:
+
+- Cập nhật dữ liệu thời gian thực: Tình trạng vé (còn/hết), giá vé phải được cập nhật gần như ngay lập tức trên giao diện người dùng mà không cần tải lại trang để tránh trường hợp hai người cùng mua một vé.
+
+- Sử dụng CDN (Content Delivery Network) để phân phối hình ảnh, CSS, JS nhanh hơn trên toàn cầu.
+
+# 2. Bảo mật 
+- Mã hóa dữ liệu nhạy cảm: Bắt buộc. Không chỉ là mật khẩu, mà còn là thông tin thanh toán, thông tin cá nhân (CCCD/Passport nếu có yêu cầu xác thực).
+
+- Chống tấn công SQL Injection, XSS: Cơ bản và bắt buộc.
+
+- Logging: Cần ghi log chi tiết các hoạt động:
+
+- Giao dịch tài chính (mua, bán, rút tiền).
+
+- Thay đổi thông tin vé (giá, số lượng).
+
+- Đăng nhập, đăng xuất, các lần thử đăng nhập thất bại.
+
+- Backup dữ liệu: Rất quan trọng.
+
+- Bảo mật giao dịch: Tuân thủ tiêu chuẩn PCI DSS ( Payment Card Industry Data Security Standard) nếu trực tiếp xử lý thông tin thẻ tín dụng. Tích hợp với các cổng thanh toán uy tín (PayPal, Momo, VNPAY...) để giảm thiểu rủi ro.
+
+- Chống gian lận:
+
+  Hệ thống cần có cơ chế phát hiện các hành vi đáng ngờ 
+
+  Xác thực người bánđể tăng độ tin cậy.
+
+  Xác thực vé: Nếu có thể, tích hợp API với nhà tổ chức sự kiện để kiểm tra tính hợp lệ của mã vạch/QR code của vé.
+
+# 3. Khả năng mở rộng
+- Kiến trúc module hóa: Rất tốt. Ví dụ: module quản lý người dùng, module quản lý sự kiện, module thanh toán, module tìm kiếm.
+
+- Khả năng tích hợp: Cần xác định rõ các hệ thống cần tích hợp:
+
+- Bắt buộc: Cổng thanh toán, Dịch vụ email/SMS (để gửi thông báo, mã OTP).
+
+- Nên có: Nền tảng mạng xã hội (để đăng nhập/chia sẻ), Google Maps (hiển thị địa điểm), Dịch vụ phân tích (Google Analytics).
+
+- Documentation: Cần có API documentation rõ ràng cho cả việc bảo trì nội bộ và tích hợp bên ngoài trong tương lai.
+
+# 4. Giao diện người dùng (UI/UX)
+- Thiết kế responsive: Bắt buộc. Phần lớn người dùng sẽ truy cập qua di động.
+
+- Thời gian học sử dụng: Không quá 30 phút  là một mục tiêu tốt. Quy trình mua vé và đăng bán vé phải cực kỳ đơn giản và trực quan.
+
+- Luồng mua vé: Tìm kiếm -> Chọn vé -> Thanh toán -> Nhận vé. Chỉ nên có 3-4 bước.
+
+- Luồng bán vé: Đăng nhập -> Điền thông tin vé -> Đặt giá -> Đăng bán.
+
+- Giao diện nhất quán: Rất tốt.
+
+- Bổ sung:
+
+- Tìm kiếm và bộ lọc mạnh mẽ: Người dùng cần lọc sự kiện theo: Tên, địa điểm, ngày tháng, danh mục (nhạc, thể thao...), khoảng giá.
+
+- Hiển thị thông tin vé rõ ràng: Sơ đồ chỗ ngồi nếu có, vị trí (khu, hàng, ghế), các lưu ý đặc biệt (vé có tầm nhìn hạn chế, vé điện tử/vé cứng).
+
+# 5. Tương thích 
+- Danh sách của bạn đã rất đầy đủ và chính xác. Tối ưu cho kết nối mạng chậm là một điểm cộng lớn, đặc biệt khi người dùng đang ở khu vực đông người, sóng yếu.
+
+# 6. Độ tin cậy 
+- Uptime tối thiểu 99.9%: Downtime vào thời điểm một sự kiện hot đang được giao dịch có thể gây thiệt hại tài chính và uy tín nặng nề.
+
+- Thời gian phục hồi sau sự cố < 4 giờ
+
+- Backup dữ liệu hàng ngày: Cần có cơ chế kiểm tra tính toàn vẹn của bản backup.
+
+- Phương án dự phòng: Cần có hệ thống dự phòng , cân bằng tải để đảm bảo hệ thống luôn hoạt động ngay cả khi một máy chủ gặp sự cố.
+
+# 7. Khả năng bảo trì 
+- Đây là những tiêu chuẩn cho một dự án chuyên nghiệp.
+
+- Code được viết theo chuẩn clean code
+
+- Tài liệu kỹ thuật chi tiết
+
+- Dễ dàng rollback khi cần thiết
+
+# 8. Pháp lý và Tuân thủ 
+- Tuân thủ quy định địa phương: Phải tuân thủ luật pháp của từng quốc gia/khu vực về việc bán lại vé (chống bán vé chợ đen với giá cắt cổ ). Một số nơi có thể giới hạn mức giá bán lại không được vượt quá một tỷ lệ % nhất định so với giá gốc.
+
+- Chính sách và Điều khoản rõ ràng: Hệ thống phải có các trang chính sách (Terms of Service, Privacy Policy) dễ hiểu, quy định rõ:
+
+- Phí dịch vụ của nền tảng (cho người mua và người bán).
+
+- Quy trình giải quyết tranh chấp (khi vé là giả, sự kiện bị hủy/hoãn).
+
+- Trách nhiệm của người bán và người mua.
+
+# 9. Hỗ trợ và Vận hành
+- Hỗ trợ khách hàng: Hệ thống phải có công cụ để đội ngũ hỗ trợ khách hàng có thể:
+
+- Tra cứu thông tin giao dịch, thông tin người dùng.
+
+- Tạm khóa giao dịch, tạm khóa tài khoản khi có tranh chấp.
+
+- Hỗ trợ quá trình hoàn tiền (refund).
+
+- Quản lý nội dung: Phải có giao diện quản trị để kiểm duyệt các sự kiện được đăng, quản lý người dùng, và xem báo cáo.
+
+
 
 
 
