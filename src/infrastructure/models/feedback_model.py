@@ -1,15 +1,27 @@
-from sqlalchemy import Column, Integer, String, DateTime, Float, ForeignKey
+from sqlalchemy import Column, Integer, String, DateTime, Float, ForeignKey, Text
+from sqlalchemy.sql import func
 from infrastructure.databases.base import Base
 
-class FeedbackModel(Base):
-    __tablename__ = 'feedback'
+class UserFeedbackModel(Base):
+    __tablename__ = 'user_feedback'
     __table_args__ = {'extend_existing': True}
 
-    FeedBackID = Column(Integer, primary_key=True, autoincrement=True, nullable=False)
-    TransactionID = Column(Integer, ForeignKey('transactions.TransactionID'), nullable=False)
-    SenderID = Column(Integer, ForeignKey('users.UserId'), nullable=False)
-    ReceiverID = Column(Integer, ForeignKey('users.UserId'), nullable=False)
+    FeedbackID = Column(Integer, primary_key=True, autoincrement=True)
+    ReviewerID = Column(Integer, ForeignKey('users.UserId'), nullable=False)
+    TargetUserID = Column(Integer, ForeignKey('users.UserId'), nullable=False)
     Rating = Column(Float, nullable=False)
-    Date = Column(DateTime, nullable=False)
-    Comment = Column(String(255), nullable=True)  # cho phép null
+    Comment = Column(Text)
+    TransactionID = Column(Integer, ForeignKey('transactions.TransactionID'))
+    CreatedAt = Column(DateTime, default=func.now())
+
+class TicketFeedbackModel(Base):
+    __tablename__ = 'ticket_feedback'
+    __table_args__ = {'extend_existing': True}
+
+    FeedbackID = Column(Integer, primary_key=True, autoincrement=True)
+    ReviewerID = Column(Integer, ForeignKey('users.UserId'), nullable=False)
+    TicketID = Column(Integer, ForeignKey('ticket.TicketID'), nullable=False)
+    Rating = Column(Float, nullable=False)
+    Comment = Column(Text)
+    CreatedAt = Column(DateTime, default=func.now())
 

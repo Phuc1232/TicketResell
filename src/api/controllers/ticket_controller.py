@@ -5,7 +5,6 @@ from services.user_service import UserService
 from infrastructure.repositories.ticket_repository import TicketRepository
 from infrastructure.repositories.user_repository import UserRepository
 from api.schemas.ticket import TicketRequestSchema, TicketResponseSchema
-from datetime import datetime
 from infrastructure.databases.mssql import session
 
 bp = Blueprint('ticket', __name__, url_prefix='/tickets')
@@ -129,11 +128,21 @@ def create_ticket():
                 Status:
                   type: string
                   enum: [Available, Sold, Reserved, Cancelled]
-                  description: Status of the ticket (optional, defaults to Available)
+                  description: Status of the ticket
+                ContactInfo:
+                  type: string
+                  description: Contact information for the seller
+                PaymentMethod:
+                  type: string
+                  enum: [Cash, Bank Transfer, Digital Wallet, Credit Card]
+                  description: Preferred payment method
               required:
                 - EventName
                 - EventDate
                 - Price
+                - Status
+                - ContactInfo
+                - PaymentMethod
       tags:
         - Tickets
       responses:
@@ -198,10 +207,12 @@ def create_ticket():
             data['Status'] = 'Available'
         
         ticket = ticket_service.create_ticket(
-            EventName=data['EventName'],
             EventDate=data['EventDate'],
             Price=data['Price'],
+            EventName=data['EventName'],
             Status=data['Status'],
+            PaymentMethod=data['PaymentMethod'],
+            ContactInfo=data['ContactInfo'],
             OwnerID=data['OwnerID']
         )
         return jsonify(response_schema.dump(ticket)), 201
@@ -246,10 +257,19 @@ def update_ticket(ticket_id):
                   type: string
                   enum: [Available, Sold, Reserved, Cancelled]
                   description: Status of the ticket
+                ContactInfo:
+                  type: string
+                  description: Contact information for the seller
+                PaymentMethod:
+                  type: string
+                  enum: [Cash, Bank Transfer, Digital Wallet, Credit Card]
+                  description: Preferred payment method
               required:
                 - EventName
                 - EventDate
                 - Price
+                - ContactInfo
+                - PaymentMethod
       tags:
         - Tickets
       responses:
@@ -326,7 +346,9 @@ def update_ticket(ticket_id):
             EventName=data['EventName'],
             EventDate=data['EventDate'],
             Price=data['Price'],
-            Status=data.get('Status', 'Available'),
+            Status=data['Status'],
+            PaymentMethod=data['PaymentMethod'],
+            ContactInfo=data['ContactInfo'],
             OwnerID=data['OwnerID']
         )
         return jsonify(response_schema.dump(ticket)), 200
@@ -377,9 +399,8 @@ def get_my_tickets():
         # Get current user ID from JWT token
         current_user_id = int(get_jwt_identity())
         
-        # Get all tickets and filter by current user
-        all_tickets = ticket_service.list_tickets()
-        my_tickets = [ticket for ticket in all_tickets if ticket.OwnerID == current_user_id]
+        # Get tickets by owner using efficient method
+        my_tickets = ticket_service.get_tickets_by_owner(current_user_id)
         
         return jsonify(response_schema.dump(my_tickets, many=True)), 200
     except Exception as e:
@@ -435,9 +456,8 @@ def get_tickets_by_owner(owner_id):
         if not owner:
             return jsonify({"message": "Owner not found"}), 404
         
-        # Get all tickets and filter by owner
-        all_tickets = ticket_service.list_tickets()
-        owner_tickets = [ticket for ticket in all_tickets if ticket.OwnerID == owner_id]
+        # Get tickets by owner using efficient method
+        owner_tickets = ticket_service.get_tickets_by_owner(owner_id)
         
         return jsonify(response_schema.dump(owner_tickets, many=True)), 200
     except Exception as e:
@@ -446,10 +466,64 @@ def get_tickets_by_owner(owner_id):
 @bp.route('/search', methods=['GET'])
 def search_tickets():
     """
-    Search tickets with filters
+    Search tickets by event name
     ---
     get:
-      summary: Search tickets with filters
+      summary: Search tickets by event name
+      parameters:
+        - name: event_name
+          in: query
+          required: true
+          schema:
+            type: string
+          description: Event name to search, required
+      tags:
+        - Tickets
+      responses:
+        200:
+          description: List of matching tickets
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TicketResponse'
+        400:
+          description: Missing event_name parameter
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+        500:
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+    """
+    try:
+        event_name = request.args.get('event_name')
+        if not event_name:
+            return jsonify({"message": "event_name parameter is required"}), 400
+        
+        tickets = ticket_service.search_tickets_by_event_name(event_name)
+        return jsonify(response_schema.dump(tickets, many=True)), 200
+    except Exception as e:
+        return jsonify({"message": "Error searching tickets", "error": str(e)}), 500
+
+@bp.route('/search/advanced', methods=['GET'])
+def search_tickets_advanced():
+    """
+    Advanced search tickets with multiple filters
+    ---
+    get:
+      summary: Advanced search tickets with multiple filters
       parameters:
         - name: event_name
           in: query
@@ -477,24 +551,23 @@ def search_tickets():
           schema:
             type: string
           description: Event location
-        - name: date_from
-          in: query
-          schema:
-            type: string
-            format: date-time
-          description: Start date
-        - name: date_to
-          in: query
-          schema:
-            type: string
-            format: date-time
-          description: End date
         - name: ticket_type
           in: query
           schema:
             type: string
             enum: [VIP, Premium, Standard, Economy]
           description: Ticket type filter
+        - name: is_negotiable
+          in: query
+          schema:
+            type: boolean
+          description: Negotiable filter
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+          description: Number of results to return
       tags:
         - Tickets
       responses:
@@ -509,18 +582,20 @@ def search_tickets():
     """
     try:
         filters = {}
-        for key in ['event_name', 'event_type', 'min_price', 'max_price', 'location', 
-                   'date_from', 'date_to', 'ticket_type']:
+        for key in ['event_name', 'event_type', 'min_price', 'max_price', 
+                   'location', 'ticket_type', 'is_negotiable', 'limit']:
             value = request.args.get(key)
             if value:
                 if key in ['min_price', 'max_price']:
                     filters[key] = float(value)
-                elif key in ['date_from', 'date_to']:
-                    filters[key] = datetime.fromisoformat(value.replace('Z', '+00:00'))
+                elif key == 'is_negotiable':
+                    filters[key] = value.lower() == 'true'
+                elif key == 'limit':
+                    filters[key] = int(value)
                 else:
                     filters[key] = value
         
-        tickets = ticket_service.search_tickets(**filters)
+        tickets = ticket_service.search_tickets_advanced(**filters)
         return jsonify(response_schema.dump(tickets, many=True)), 200
     except Exception as e:
         return jsonify({"message": "Error searching tickets", "error": str(e)}), 500
@@ -531,7 +606,7 @@ def get_trending_tickets():
     Get trending tickets
     ---
     get:
-      summary: Get trending tickets
+      summary: Get trending tickets based on view count and rating
       parameters:
         - name: limit
           in: query
@@ -558,81 +633,86 @@ def get_trending_tickets():
     except Exception as e:
         return jsonify({"message": "Error getting trending tickets", "error": str(e)}), 500
 
-@bp.route('/<int:ticket_id>/reserve', methods=['POST'])
-@jwt_required()
-def reserve_ticket(ticket_id):
+@bp.route('/event-type/<event_type>', methods=['GET'])
+def get_tickets_by_event_type(event_type):
     """
-    Reserve a ticket
+    Get tickets by event type
     ---
-    post:
-      summary: Reserve a ticket
-      security:
-        - BearerAuth: []
+    get:
+      summary: Get tickets by event type
       parameters:
-        - name: ticket_id
+        - name: event_type
           in: path
           required: true
           schema:
+            type: string
+            enum: [Concert, Sports, Theater, Conference, Other]
+          description: Event type to filter by
+        - name: limit
+          in: query
+          schema:
             type: integer
-          description: ID of the ticket to reserve
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                reservation_duration:
-                  type: integer
-                  minimum: 1
-                  maximum: 24
-                  description: Reservation duration in hours
-                buyer_message:
-                  type: string
-                  maxLength: 500
-                  description: Message to seller
+            default: 20
+          description: Number of tickets to return
       tags:
         - Tickets
       responses:
         200:
-          description: Ticket reserved successfully
+          description: List of tickets by event type
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/TicketResponse'
-        400:
-          description: Invalid request
-        404:
-          description: Ticket not found
-        409:
-          description: Ticket already reserved
+                type: array
+                items:
+                  $ref: '#/components/schemas/TicketResponse'
     """
     try:
-        current_user_id = int(get_jwt_identity())
-        data = request.get_json()
-        
-        if not data:
-            return jsonify({"message": "No data provided"}), 400
-        
-        reservation_duration = data.get('reservation_duration', 2)
-        buyer_message = data.get('buyer_message', '')
-        
-        ticket = ticket_service.reserve_ticket(ticket_id, current_user_id, 
-                                             reservation_duration, buyer_message)
-        return jsonify(response_schema.dump(ticket)), 200
-    except ValueError as e:
-        return jsonify({"message": str(e)}), 404
+        limit = int(request.args.get('limit', 20))
+        tickets = ticket_service.get_tickets_by_event_type(event_type, limit)
+        return jsonify(response_schema.dump(tickets, many=True)), 200
     except Exception as e:
-        return jsonify({"message": "Error reserving ticket", "error": str(e)}), 500
+        return jsonify({"message": "Error getting tickets by event type", "error": str(e)}), 500
 
-@bp.route('/<int:ticket_id>/buy', methods=['POST'])
-@jwt_required()
-def buy_ticket(ticket_id):
+@bp.route('/<int:ticket_id>/view', methods=['POST'])
+def increment_view_count(ticket_id):
     """
-    Buy a ticket
+    Increment view count for a ticket
     ---
     post:
-      summary: Buy a ticket
+      summary: Increment view count for a ticket
+      parameters:
+        - name: ticket_id
+          in: path
+          required: true
+          schema:
+            type: integer
+          description: ID of the ticket
+      tags:
+        - Tickets
+      responses:
+        200:
+          description: View count incremented successfully
+        404:
+          description: Ticket not found
+    """
+    try:
+        ticket = ticket_service.get_ticket(ticket_id)
+        if not ticket:
+            return jsonify({'message': 'Ticket not found'}), 404
+        
+        ticket_service.increment_view_count(ticket_id)
+        return jsonify({"message": "View count incremented"}), 200
+    except Exception as e:
+        return jsonify({"message": "Error incrementing view count", "error": str(e)}), 500
+
+@bp.route('/<int:ticket_id>/rate', methods=['POST'])
+@jwt_required()
+def rate_ticket(ticket_id):
+    """
+    Rate a ticket
+    ---
+    post:
+      summary: Rate a ticket (1-5 stars)
       security:
         - BearerAuth: []
       parameters:
@@ -641,7 +721,7 @@ def buy_ticket(ticket_id):
           required: true
           schema:
             type: integer
-          description: ID of the ticket to buy
+          description: ID of the ticket to rate
       requestBody:
         required: true
         content:
@@ -649,47 +729,42 @@ def buy_ticket(ticket_id):
             schema:
               type: object
               properties:
-                payment_method:
-                  type: string
-                  enum: [Cash, Bank Transfer, Digital Wallet, Credit Card]
-                  description: Payment method
-                buyer_message:
-                  type: string
-                  maxLength: 500
-                  description: Message to seller
+                rating:
+                  type: number
+                  minimum: 0
+                  maximum: 5
+                  description: Rating value, range 0-5
+              required:
+                - rating
       tags:
         - Tickets
       responses:
         200:
-          description: Ticket purchased successfully
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/TicketResponse'
+          description: Rating updated successfully
         400:
-          description: Invalid request
+          description: Invalid rating value
         404:
           description: Ticket not found
-        409:
-          description: Ticket not available
     """
     try:
-        current_user_id = int(get_jwt_identity())
         data = request.get_json()
+        if not data or 'rating' not in data:
+            return jsonify({"message": "Rating is required"}), 400
         
-        if not data:
-            return jsonify({"message": "No data provided"}), 400
+        rating = float(data['rating'])
+        if not (0 <= rating <= 5):
+            return jsonify({"message": "Rating must be between 0 and 5"}), 400
         
-        payment_method = data.get('payment_method', 'Digital Wallet')
-        buyer_message = data.get('buyer_message', '')
+        ticket = ticket_service.get_ticket(ticket_id)
+        if not ticket:
+            return jsonify({'message': 'Ticket not found'}), 404
         
-        ticket = ticket_service.buy_ticket(ticket_id, current_user_id, 
-                                         payment_method, buyer_message)
-        return jsonify(response_schema.dump(ticket)), 200
+        ticket_service.update_rating(ticket_id, rating)
+        return jsonify({"message": "Rating updated successfully"}), 200
     except ValueError as e:
-        return jsonify({"message": str(e)}), 404
+        return jsonify({"message": str(e)}), 400
     except Exception as e:
-        return jsonify({"message": "Error buying ticket", "error": str(e)}), 500
+        return jsonify({"message": "Error updating rating", "error": str(e)}), 500
 
 @bp.route('/<int:ticket_id>', methods=['DELETE'])
 @jwt_required()

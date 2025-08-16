@@ -1,0 +1,95 @@
+from typing import List, Optional
+from domain.models.feedback import Feedback, TicketFeedback
+from domain.models.ifeedback_repository import IFeedbackRepository
+from infrastructure.models.feedback_model import UserFeedbackModel, TicketFeedbackModel
+from infrastructure.databases.mssql import session
+from sqlalchemy import func
+
+class FeedbackRepository(IFeedbackRepository):
+    def add_user_feedback(self, feedback: Feedback) -> Feedback:
+        model = UserFeedbackModel(
+            ReviewerID=feedback.ReviewerID,
+            TargetUserID=feedback.TargetUserID,
+            Rating=feedback.Rating,
+            Comment=feedback.Comment,
+            TransactionID=feedback.TransactionID,
+            CreatedAt=feedback.CreatedAt
+        )
+        session.add(model)
+        session.commit()
+        session.refresh(model)
+        return self._to_domain_user_feedback(model)
+    
+    def add_ticket_feedback(self, feedback: TicketFeedback) -> TicketFeedback:
+        model = TicketFeedbackModel(
+            ReviewerID=feedback.ReviewerID,
+            TicketID=feedback.TicketID,
+            Rating=feedback.Rating,
+            Comment=feedback.Comment,
+            CreatedAt=feedback.CreatedAt
+        )
+        session.add(model)
+        session.commit()
+        session.refresh(model)
+        return self._to_domain_ticket_feedback(model)
+    
+    def get_user_feedback(self, user_id: int, limit: int = 20, offset: int = 0) -> List[Feedback]:
+        models = session.query(UserFeedbackModel).filter(
+            UserFeedbackModel.TargetUserID == user_id
+        ).order_by(UserFeedbackModel.CreatedAt.desc()).offset(offset).limit(limit).all()
+        return [self._to_domain_user_feedback(model) for model in models]
+    
+    def get_ticket_feedback(self, ticket_id: int, limit: int = 20, offset: int = 0) -> List[TicketFeedback]:
+        models = session.query(TicketFeedbackModel).filter(
+            TicketFeedbackModel.TicketID == ticket_id
+        ).order_by(TicketFeedbackModel.CreatedAt.desc()).offset(offset).limit(limit).all()
+        return [self._to_domain_ticket_feedback(model) for model in models]
+    
+    def get_average_user_rating(self, user_id: int) -> float:
+        result = session.query(func.avg(UserFeedbackModel.Rating)).filter(
+            UserFeedbackModel.TargetUserID == user_id
+        ).scalar()
+        return float(result) if result else 0.0
+    
+    def get_average_ticket_rating(self, ticket_id: int) -> float:
+        result = session.query(func.avg(TicketFeedbackModel.Rating)).filter(
+            TicketFeedbackModel.TicketID == ticket_id
+        ).scalar()
+        return float(result) if result else 0.0
+    
+    def delete_user_feedback(self, feedback_id: int) -> bool:
+        model = session.query(UserFeedbackModel).filter(UserFeedbackModel.FeedbackID == feedback_id).first()
+        if model:
+            session.delete(model)
+            session.commit()
+            return True
+        return False
+    
+    def delete_ticket_feedback(self, feedback_id: int) -> bool:
+        model = session.query(TicketFeedbackModel).filter(TicketFeedbackModel.FeedbackID == feedback_id).first()
+        if model:
+            session.delete(model)
+            session.commit()
+            return True
+        return False
+    
+    def _to_domain_user_feedback(self, model: UserFeedbackModel) -> Feedback:
+        return Feedback(
+            FeedbackID=model.FeedbackID,
+            ReviewerID=model.ReviewerID,
+            TargetUserID=model.TargetUserID,
+            Rating=model.Rating,
+            Comment=model.Comment,
+            TransactionID=model.TransactionID,
+            CreatedAt=model.CreatedAt
+        )
+    
+    def _to_domain_ticket_feedback(self, model: TicketFeedbackModel) -> TicketFeedback:
+        return TicketFeedback(
+            FeedbackID=model.FeedbackID,
+            ReviewerID=model.ReviewerID,
+            TicketID=model.TicketID,
+            Rating=model.Rating,
+            Comment=model.Comment,
+            CreatedAt=model.CreatedAt
+        )

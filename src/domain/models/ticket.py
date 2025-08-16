@@ -8,7 +8,9 @@ class Ticket:
         EventDate: datetime,
         Price: float,
         EventName: str,
-        Status: Optional[str],
+        Status: str,
+        PaymentMethod: str,
+        ContactInfo: str,
         OwnerID: int
     ):
         self.TicketID = TicketID
@@ -16,4 +18,6 @@ class Ticket:
         self.Price = Price
         self.EventName = EventName
         self.Status = Status
+        self.PaymentMethod = PaymentMethod
+        self.ContactInfo = ContactInfo
         self.OwnerID = OwnerID
