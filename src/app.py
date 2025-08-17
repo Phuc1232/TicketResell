@@ -43,7 +43,7 @@ def create_app():
     with app.test_request_context():
         for rule in app.url_map.iter_rules():
             # Thêm tất cả endpoints cho Swagger
-            if rule.endpoint.startswith(('ticket.', 'user.', 'auth.', 'transaction.', 'chat.', 'notification.', 'feedback.')):
+            if rule.endpoint.startswith(('ticket.', 'user.', 'auth.', 'transaction.', 'chat.', 'notifications.', 'feedback.', 'payment.', 'earning.', 'support.')):
                 view_func = app.view_functions[rule.endpoint]
                 print(f"Adding path: {rule.rule} -> {view_func}")
                 spec.path(view=view_func)

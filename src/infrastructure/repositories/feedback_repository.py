@@ -2,10 +2,15 @@ from typing import List, Optional
 from domain.models.feedback import Feedback, TicketFeedback
 from domain.models.ifeedback_repository import IFeedbackRepository
 from infrastructure.models.feedback_model import UserFeedbackModel, TicketFeedbackModel
-from infrastructure.databases.mssql import session
 from sqlalchemy import func
 
 class FeedbackRepository(IFeedbackRepository):
+    def __init__(self, session=None):
+        if session is None:
+            from infrastructure.databases.mssql import session as default_session
+            self.session = default_session
+        else:
+            self.session = session
     def add_user_feedback(self, feedback: Feedback) -> Feedback:
         model = UserFeedbackModel(
             ReviewerID=feedback.ReviewerID,
@@ -15,9 +20,9 @@ class FeedbackRepository(IFeedbackRepository):
             TransactionID=feedback.TransactionID,
             CreatedAt=feedback.CreatedAt
         )
-        session.add(model)
-        session.commit()
-        session.refresh(model)
+        self.session.add(model)
+        self.session.commit()
+        self.session.refresh(model)
         return self._to_domain_user_feedback(model)
     
     def add_ticket_feedback(self, feedback: TicketFeedback) -> TicketFeedback:
@@ -28,48 +33,48 @@ class FeedbackRepository(IFeedbackRepository):
             Comment=feedback.Comment,
             CreatedAt=feedback.CreatedAt
         )
-        session.add(model)
-        session.commit()
-        session.refresh(model)
+        self.session.add(model)
+        self.session.commit()
+        self.session.refresh(model)
         return self._to_domain_ticket_feedback(model)
     
     def get_user_feedback(self, user_id: int, limit: int = 20, offset: int = 0) -> List[Feedback]:
-        models = session.query(UserFeedbackModel).filter(
+        models = self.session.query(UserFeedbackModel).filter(
             UserFeedbackModel.TargetUserID == user_id
         ).order_by(UserFeedbackModel.CreatedAt.desc()).offset(offset).limit(limit).all()
         return [self._to_domain_user_feedback(model) for model in models]
     
     def get_ticket_feedback(self, ticket_id: int, limit: int = 20, offset: int = 0) -> List[TicketFeedback]:
-        models = session.query(TicketFeedbackModel).filter(
+        models = self.session.query(TicketFeedbackModel).filter(
             TicketFeedbackModel.TicketID == ticket_id
         ).order_by(TicketFeedbackModel.CreatedAt.desc()).offset(offset).limit(limit).all()
         return [self._to_domain_ticket_feedback(model) for model in models]
     
     def get_average_user_rating(self, user_id: int) -> float:
-        result = session.query(func.avg(UserFeedbackModel.Rating)).filter(
+        result = self.session.query(func.avg(UserFeedbackModel.Rating)).filter(
             UserFeedbackModel.TargetUserID == user_id
         ).scalar()
         return float(result) if result else 0.0
     
     def get_average_ticket_rating(self, ticket_id: int) -> float:
-        result = session.query(func.avg(TicketFeedbackModel.Rating)).filter(
+        result = self.session.query(func.avg(TicketFeedbackModel.Rating)).filter(
             TicketFeedbackModel.TicketID == ticket_id
         ).scalar()
         return float(result) if result else 0.0
     
     def delete_user_feedback(self, feedback_id: int) -> bool:
-        model = session.query(UserFeedbackModel).filter(UserFeedbackModel.FeedbackID == feedback_id).first()
+        model = self.session.query(UserFeedbackModel).filter(UserFeedbackModel.FeedbackID == feedback_id).first()
         if model:
-            session.delete(model)
-            session.commit()
+            self.session.delete(model)
+            self.session.commit()
             return True
         return False
     
     def delete_ticket_feedback(self, feedback_id: int) -> bool:
-        model = session.query(TicketFeedbackModel).filter(TicketFeedbackModel.FeedbackID == feedback_id).first()
+        model = self.session.query(TicketFeedbackModel).filter(TicketFeedbackModel.FeedbackID == feedback_id).first()
         if model:
-            session.delete(model)
-            session.commit()
+            self.session.delete(model)
+            self.session.commit()
             return True
         return False
     
