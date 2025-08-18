@@ -52,14 +52,6 @@ Với cấu trúc này ta có 3 phần :
 
 - Phần 3 : Các yêu cầu phi chức năng 
 # II. Yêu cầu chức năng
-# 1.Các tác nhân chính
-- Guest: Khách chưa đăng nhập
-
-- User: Người dùng đã đăng ký (người bán hoặc người mua)
-
-- Admin: Quản trị hệ thống
-
-# 2.Yêu cầu chức năng
 # 2.1 Các tác nhân
 
 Hệ thống nền tảng gồm có các tác nhân là Khách, Quản trị viên, Thành viên, Cổng thanh toán. Trong đó:
