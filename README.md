@@ -3,7 +3,7 @@
 
 
 # I. Giới thiệu
-# 1.1 Mục đích
+# 🎯 1.1 Mục đích
 
 Mục đích tài liệu này là cung cấp một cái nhìn tổng quan dễ hiểu và thành phần dự án.
 
@@ -11,7 +11,7 @@ Xây dựng một nền tảng số cho phép người dùng đăng bán, tìm k
 
 Tài liệu được làm ra để cho sinh viên trực tiếp tham gia phát triển dự án để phục vụ cho việc hoàn thành đồ án. Ngoài ra trong môi trường thực tế bên ngoài tài liệu này phục vụ cho nhà phát triển website, kiểm thử viên, nhà quản lý dự án và các sinh viên để tham khảo.
 
-# 1.2 Phạm vi
+# 1.2  Phạm vi
 
 Tài liệu đặc tả yêu cầu phần mềm này được xây dựng nhằm phục vụ cho dự án Xây dựng nền tảng bán lại vé sự kiện chưa sử dụng.
 
