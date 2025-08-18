@@ -21,7 +21,10 @@ class UserRepository(IUserRepository):
             email=model.Email,
             date_of_birth=model.Date_Of_Birth,
             create_date=model.Create_Date,
-            role_id=model.RoleID
+            role_id=model.RoleID,
+            verified=model.verified,
+            verification_code=model.verification_code,
+            verification_expires_at=model.verification_expires_at
         )
 
     # Domain -> ORM
@@ -35,7 +38,10 @@ class UserRepository(IUserRepository):
             Email=user.email,
             Date_Of_Birth=user.date_of_birth,
             Create_Date=user.create_date,
-            RoleID=user.role_id
+            RoleID=user.role_id,
+            verified=user.verified,
+            verification_code=user.verification_code,
+            verification_expires_at=user.verification_expires_at
         )
 
     def add(self, user: User) -> User:
@@ -75,6 +81,10 @@ class UserRepository(IUserRepository):
             model.Email = user.email
             model.Date_Of_Birth = user.date_of_birth
             model.RoleID = user.role_id
+            # Update verification fields
+            model.verified = user.verified
+            model.verification_code = user.verification_code
+            model.verification_expires_at = user.verification_expires_at
 
             self.session.commit()
             self.session.refresh(model)

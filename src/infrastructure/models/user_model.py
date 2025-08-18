@@ -14,3 +14,8 @@ class UserModel(Base):
     Date_Of_Birth = Column(DateTime, nullable=False)
     Create_Date = Column(DateTime)
     RoleID = Column(Integer, ForeignKey('roles.RoleID'), default=2)
+
+    # Verification fields
+    verified = Column(Boolean, default=False, nullable=False)
+    verification_code = Column(String(6), nullable=True)
+    verification_expires_at = Column(DateTime, nullable=True)

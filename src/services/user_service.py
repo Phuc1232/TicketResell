@@ -2,25 +2,15 @@ from domain.models.user import User
 from domain.models.iuser_repository import IUserRepository
 from typing import Optional, List
 from datetime import datetime
-from werkzeug.security import generate_password_hash, check_password_hash
 
 class UserService:
+    """
+    User Service - Handles user profile management and CRUD operations
+    Authentication logic moved to AuthService for better separation of concerns
+    """
+
     def __init__(self, repository: IUserRepository):
         self.repository = repository
-
-    def register_user(self, phone_number: str, username: str, status: str, password: str, email: str,
-                      date_of_birth, role_id: int) -> User:
-        password_hash = generate_password_hash(password)
-        user = User(id=None, phone_number=phone_number, username=username, status=status, 
-                    password_hash=password_hash, email=email, date_of_birth=date_of_birth,
-                    create_date=datetime.utcnow(), role_id=role_id)
-        return self.repository.add(user)
-
-    def authenticate_user(self, email: str, password: str) -> Optional[User]:
-        user = self.repository.get_by_email(email)
-        if user and check_password_hash(user.password_hash, password):
-            return user
-        return None
 
     def list_users(self) -> List[User]:
         return self.repository.list()

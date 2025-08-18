@@ -13,3 +13,4 @@ apispec_webframeworks
 flask-swagger-ui
 Flask-JWT-Extended
 Werkzeug
+flask-dotenv

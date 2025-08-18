@@ -1,31 +1,35 @@
 from flask import Blueprint, request, jsonify
-from flask_jwt_extended import create_access_token, jwt_required, get_jwt_identity
+from flask_jwt_extended import jwt_required, get_jwt_identity
 from services.user_service import UserService
 from infrastructure.repositories.user_repository import UserRepository
-from api.schemas.user import UserRegisterSchema, UserLoginSchema, UserResponseSchema, UserUpdateSchema, UserVerificationSchema, UserRatingSchema
+from api.schemas.user import UserResponseSchema, UserUpdateSchema, UserRatingSchema, UserVerificationSchema
 from infrastructure.databases.mssql import session
+from api.decorators.auth_decorators import admin_required, owner_or_admin_required, delete_permission_required
+from utils.jwt_helpers import get_current_user_id, get_current_user_role
 
 bp = Blueprint('user', __name__, url_prefix='/users')
 user_service = UserService(UserRepository(session))
 
-register_schema = UserRegisterSchema()
-login_schema = UserLoginSchema()
+# Only schemas needed for user management (auth schemas moved to auth_controller)
 response_schema = UserResponseSchema()
 update_schema = UserUpdateSchema()
-verification_schema = UserVerificationSchema()
 rating_schema = UserRatingSchema()
+verification_schema = UserVerificationSchema()
 
+# Legacy functions - now replaced by decorators and JWT helpers
+# Keeping for backward compatibility, but deprecated
 def is_admin(user_id: int) -> bool:
-    """Kiểm tra user có phải admin không"""
+    """DEPRECATED: Use utils.jwt_helpers.is_admin() instead"""
     user = user_service.get_user(user_id)
-    return user and user.role_id == 1  # Giả sử role_id = 1 là admin
+    return user and user.role_id == 1
 
 def can_delete_user(current_user_id: int, target_user_id: int) -> bool:
-    """Kiểm tra quyền xóa user: admin hoặc chính user đó"""
+    """DEPRECATED: Use decorators instead"""
     return current_user_id == target_user_id or is_admin(current_user_id)
 
 @bp.route('/', methods=['GET'])
 @jwt_required()
+@admin_required
 def list_users():
     """
     Get all users (Admin only)
@@ -55,10 +59,6 @@ def list_users():
                   message:
                     type: string
     """
-    current_user_id = int(get_jwt_identity())
-    if not is_admin(current_user_id):
-        return jsonify({"message": "Access denied - Admin only"}), 403
-    
     users = user_service.list_users()
     return jsonify(response_schema.dump(users, many=True)), 200
 
@@ -113,64 +113,8 @@ def search_users():
     except Exception as e:
         return jsonify({"message": "Error searching users", "error": str(e)}), 500
 
-@bp.route('/register', methods=['POST'])
-def register():
-    """
-    Register a new user
-    ---
-    post:
-      summary: Register a new user
-      tags:
-        - Users
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/UserRegister'
-      responses:
-        201:
-          description: User created successfully
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/UserResponse'
-    """
-    data = request.get_json()
-    errors = register_schema.validate(data)
-    if errors:
-        return jsonify(errors), 400
-    user = user_service.register_user(**data)
-    return jsonify(response_schema.dump(user)), 201
-
-@bp.route('/login', methods=['POST'])
-def login():
-    """
-    Login and get JWT token
-    ---
-    post:
-      summary: Login
-      tags:
-        - Users
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/UserLogin'
-      responses:
-        200:
-          description: JWT token
-    """
-    data = request.get_json()
-    errors = login_schema.validate(data)
-    if errors:
-        return jsonify(errors), 400
-    user = user_service.authenticate_user(data['email'], data['password'])
-    if not user:
-        return jsonify({"message": "Invalid credentials"}), 401
-    token = create_access_token(identity=str(user.id))
-    return jsonify({"access_token": token}), 200
+# Authentication endpoints moved to /api/auth/
+# This controller now focuses only on user profile management
 
 @bp.route('/me', methods=['GET'])
 @jwt_required()
@@ -192,7 +136,7 @@ def me():
               schema:
                 $ref: '#/components/schemas/UserResponse'
     """
-    user_id = int(get_jwt_identity())
+    user_id = get_current_user_id()
     user = user_service.get_user(user_id)
     return jsonify(response_schema.dump(user)), 200
 
@@ -223,7 +167,7 @@ def update_profile():
                 $ref: '#/components/schemas/UserResponse'
     """
     try:
-        user_id = int(get_jwt_identity())
+        user_id = get_current_user_id()
         data = request.get_json()
         
         errors = update_schema.validate(data)
@@ -262,13 +206,13 @@ def verify_user():
                 $ref: '#/components/schemas/UserResponse'
     """
     try:
-        user_id = int(get_jwt_identity())
+        user_id = get_current_user_id()
         data = request.get_json()
-        
+
         errors = verification_schema.validate(data)
         if errors:
             return jsonify({"message": "Validation errors", "errors": errors}), 400
-        
+
         user = user_service.verify_user(user_id, data['verification_code'], data['verification_type'])
         return jsonify(response_schema.dump(user)), 200
     except Exception as e:
@@ -308,7 +252,7 @@ def rate_user(target_user_id):
                 $ref: '#/components/schemas/UserResponse'
     """
     try:
-        current_user_id = int(get_jwt_identity())
+        current_user_id = get_current_user_id()
         data = request.get_json()
         
         errors = rating_schema.validate(data)
@@ -327,12 +271,13 @@ def rate_user(target_user_id):
 
 @bp.route('/<int:user_id>', methods=['DELETE'])
 @jwt_required()
+@delete_permission_required
 def delete_user(user_id):
     """
-    Delete a user by ID (Admin or self only)
+    Delete a user by ID (Admin only)
     ---
     delete:
-      summary: Delete a user by ID
+      summary: Delete a user by ID (Admin only)
       security:
         - BearerAuth: []
       parameters:
@@ -348,7 +293,7 @@ def delete_user(user_id):
         204:
           description: User deleted successfully
         403:
-          description: Access denied - Can only delete yourself or admin only
+          description: Access denied - Admin privileges required
           content:
             application/json:
               schema:
@@ -366,12 +311,6 @@ def delete_user(user_id):
                   message:
                     type: string
     """
-    current_user_id = int(get_jwt_identity())
-    
-    # Kiểm tra quyền xóa
-    if not can_delete_user(current_user_id, user_id):
-        return jsonify({"message": "Access denied - Can only delete yourself or admin only"}), 403
-    
     try:
         user_service.delete_user(user_id)
         return '', 204

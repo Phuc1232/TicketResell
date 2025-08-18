@@ -8,6 +8,16 @@ from flasgger import Swagger
 from config import SwaggerConfig
 from flask_swagger_ui import get_swaggerui_blueprint
 from api.routes import register_routes
+
+# Load environment variables from .env file
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+    print("✅ .env file loaded successfully")
+except ImportError:
+    print("⚠️  python-dotenv not installed. Using system environment variables only.")
+except Exception as e:
+    print(f"⚠️  Error loading .env file: {e}")
 from flask_jwt_extended import JWTManager
 
 
@@ -43,7 +53,7 @@ def create_app():
     with app.test_request_context():
         for rule in app.url_map.iter_rules():
             # Thêm tất cả endpoints cho Swagger
-            if rule.endpoint.startswith(('ticket.', 'user.', 'auth.', 'transaction.', 'chat.', 'notifications.', 'feedback.', 'payment.', 'earning.', 'support.')):
+            if rule.endpoint.startswith(('ticket.', 'user.', 'auth.', 'admin.', 'transaction.', 'chat.', 'notifications.', 'feedback.', 'payment.', 'earning.', 'support.')):
                 view_func = app.view_functions[rule.endpoint]
                 print(f"Adding path: {rule.rule} -> {view_func}")
                 spec.path(view=view_func)
