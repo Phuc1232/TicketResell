@@ -8,6 +8,7 @@ from flasgger import Swagger
 from config import SwaggerConfig
 from flask_swagger_ui import get_swaggerui_blueprint
 from api.routes import register_routes
+import logging
 
 # Load environment variables from .env file
 try:
@@ -19,6 +20,42 @@ except ImportError:
 except Exception as e:
     print(f"⚠️  Error loading .env file: {e}")
 from flask_jwt_extended import JWTManager
+
+# Setup logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
+
+
+def _seed_admin_user():
+    """
+    Seed admin user sau khi database được khởi tạo
+    """
+    try:
+        logger.info("🌱 Starting admin seed process...")
+
+        # Import dependencies (lazy import để tránh circular imports)
+        from database.seed_admin import seed_default_admin
+        from infrastructure.repositories.user_repository import UserRepository
+        from infrastructure.databases.mssql import session
+
+        # Create repository
+        user_repository = UserRepository(session)
+
+        # Run seed
+        success = seed_default_admin(user_repository)
+
+        if success:
+            logger.info("✅ Admin seed process completed successfully!")
+        else:
+            logger.warning("⚠️ Admin seed process completed with warnings")
+
+    except Exception as e:
+        logger.error(f"❌ Admin seed process failed: {e}")
+        # Không crash app nếu seed thất bại
+        logger.warning("⚠️ Application will continue without admin seed")
 
 
 def create_app():
@@ -43,6 +80,10 @@ def create_app():
 
     try:
         init_db(app)
+
+        # Seed admin user after database initialization
+        _seed_admin_user()
+
     except Exception as e:
         print(f"Error initializing database: {e}")
 

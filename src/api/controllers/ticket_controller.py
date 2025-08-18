@@ -1,5 +1,6 @@
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
+from utils.jwt_helpers import get_current_user_id
 from services.ticket_service import TicketService
 from services.user_service import UserService
 from infrastructure.repositories.ticket_repository import TicketRepository
@@ -188,7 +189,7 @@ def create_ticket():
             return jsonify({"message": "No data provided"}), 400
             
         # Get current user ID from JWT token
-        current_user_id = int(get_jwt_identity())
+        current_user_id = get_current_user_id()
         
         # Add OwnerID to data
         data['OwnerID'] = current_user_id
@@ -324,7 +325,7 @@ def update_ticket(ticket_id):
             return jsonify({"message": "No data provided"}), 400
             
         # Get current user ID from JWT token
-        current_user_id = int(get_jwt_identity())
+        current_user_id = get_current_user_id()
         
         # Check if ticket exists and belongs to current user
         existing_ticket = ticket_service.get_ticket(ticket_id)
@@ -397,7 +398,7 @@ def get_my_tickets():
     """
     try:
         # Get current user ID from JWT token
-        current_user_id = int(get_jwt_identity())
+        current_user_id = get_current_user_id()
         
         # Get tickets by owner using efficient method
         my_tickets = ticket_service.get_tickets_by_owner(current_user_id)
@@ -818,7 +819,7 @@ def delete_ticket(ticket_id):
     """
     try:
         # Get current user ID from JWT token
-        current_user_id = int(get_jwt_identity())
+        current_user_id = get_current_user_id()
         
         # Check if ticket exists and belongs to current user
         existing_ticket = ticket_service.get_ticket(ticket_id)

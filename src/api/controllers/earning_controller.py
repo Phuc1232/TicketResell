@@ -1,5 +1,6 @@
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
+from utils.jwt_helpers import get_current_user_id
 from marshmallow import Schema, fields, validate
 from datetime import datetime
 from services.earning_service import EarningService
@@ -68,7 +69,7 @@ def create_earning():
         if errors:
             return jsonify({"message": "Validation errors", "errors": errors}), 400
         
-        current_user_id = int(get_jwt_identity())
+        current_user_id = get_current_user_id()
         
         earning = earning_service.create_earning(
             user_id=current_user_id,
@@ -105,7 +106,7 @@ def get_user_earnings():
           description: Earnings retrieved successfully
     """
     try:
-        current_user_id = int(get_jwt_identity())
+        current_user_id = get_current_user_id()
         
         earnings = earning_service.get_user_earnings(current_user_id)
         total_earnings = earning_service.get_total_user_earnings(current_user_id)
@@ -187,7 +188,7 @@ def get_total_earnings():
           description: Total earnings retrieved successfully
     """
     try:
-        current_user_id = int(get_jwt_identity())
+        current_user_id = get_current_user_id()
         
         total_earnings = earning_service.get_total_user_earnings(current_user_id)
         
@@ -243,7 +244,7 @@ def get_earnings_by_date_range():
         if errors:
             return jsonify({"message": "Validation errors", "errors": errors}), 400
         
-        current_user_id = int(get_jwt_identity())
+        current_user_id = get_current_user_id()
         
         earnings = earning_service.get_earnings_by_date_range(
             user_id=current_user_id,

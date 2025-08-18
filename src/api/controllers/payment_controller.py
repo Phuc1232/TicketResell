@@ -1,5 +1,6 @@
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
+from utils.jwt_helpers import get_current_user_id
 from marshmallow import Schema, fields, validate
 from datetime import datetime
 from services.payment_service import PaymentService
@@ -78,7 +79,7 @@ def create_payment():
         if errors:
             return jsonify({"message": "Validation errors", "errors": errors}), 400
         
-        current_user_id = int(get_jwt_identity())
+        current_user_id = get_current_user_id()
         
         payment = payment_service.create_payment(
             methods=data['methods'],
@@ -121,7 +122,7 @@ def get_user_payments():
           description: Payments retrieved successfully
     """
     try:
-        current_user_id = int(get_jwt_identity())
+        current_user_id = get_current_user_id()
         
         payments = payment_service.get_user_payments(current_user_id)
         

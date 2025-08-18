@@ -1,5 +1,6 @@
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
+from utils.jwt_helpers import get_current_user_id
 from marshmallow import Schema, fields, validate
 from datetime import datetime
 
@@ -79,7 +80,7 @@ def get_notifications():
                     type: integer
     """
     try:
-        current_user_id = int(get_jwt_identity())
+        current_user_id = get_current_user_id()
         limit = request.args.get('limit', 20, type=int)
         offset = request.args.get('offset', 0, type=int)
         unread_only = request.args.get('unread_only', False, type=bool)
@@ -161,7 +162,7 @@ def mark_notification_read(notification_id):
           description: Notification not found
     """
     try:
-        current_user_id = int(get_jwt_identity())
+        current_user_id = get_current_user_id()
         
         # TODO: Implement mark as read logic
         # 1. Verify notification belongs to current user
@@ -193,7 +194,7 @@ def mark_all_notifications_read():
           description: All notifications marked as read successfully
     """
     try:
-        current_user_id = int(get_jwt_identity())
+        current_user_id = get_current_user_id()
         
         # TODO: Implement mark all as read logic
         # 1. Update all unread notifications for current user
@@ -239,7 +240,7 @@ def get_notification_preferences():
                     type: boolean
     """
     try:
-        current_user_id = int(get_jwt_identity())
+        current_user_id = get_current_user_id()
         
         # TODO: Implement preferences retrieval logic
         # 1. Get notification preferences for current user
@@ -305,7 +306,7 @@ def update_notification_preferences():
         if errors:
             return jsonify({"message": "Validation errors", "errors": errors}), 400
         
-        current_user_id = int(get_jwt_identity())
+        current_user_id = get_current_user_id()
         
         # TODO: Implement preferences update logic
         # 1. Update notification preferences for current user

@@ -1,5 +1,6 @@
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
+from utils.jwt_helpers import get_current_user_id
 from marshmallow import Schema, fields, validate
 from datetime import datetime
 from services.chat_service import ChatService
@@ -96,7 +97,7 @@ def send_message():
         if errors:
             return jsonify({"message": "Validation errors", "errors": errors}), 400
 
-        current_user_id = int(get_jwt_identity())
+        current_user_id = get_current_user_id()
         receiver_id = data['receiver_id']
         content = data['content']
         ticket_id = data.get('ticket_id')
@@ -185,7 +186,7 @@ def get_messages(other_user_id):
           description: User not found
     """
     try:
-        current_user_id = int(get_jwt_identity())
+        current_user_id = get_current_user_id()
         limit = request.args.get('limit', 50, type=int)
         offset = request.args.get('offset', 0, type=int)
 
@@ -262,7 +263,7 @@ def get_conversations():
                           type: integer
     """
     try:
-        current_user_id = int(get_jwt_identity())
+        current_user_id = get_current_user_id()
 
         # Use ChatService to get user conversations
         conversations = chat_service.get_user_conversations(current_user_id)
@@ -316,7 +317,7 @@ def mark_messages_read(other_user_id):
           description: Messages marked as read successfully
     """
     try:
-        current_user_id = int(get_jwt_identity())
+        current_user_id = get_current_user_id()
 
         # Use ChatService to mark messages as read
         success = chat_service.mark_messages_as_read(

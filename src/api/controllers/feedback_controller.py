@@ -1,5 +1,6 @@
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
+from utils.jwt_helpers import get_current_user_id
 from marshmallow import Schema, fields, validate
 from datetime import datetime
 
@@ -100,7 +101,7 @@ def submit_user_feedback(target_user_id):
         if errors:
             return jsonify({"message": "Validation errors", "errors": errors}), 400
         
-        current_user_id = int(get_jwt_identity())
+        current_user_id = get_current_user_id()
         rating = data['rating']
         comment = data.get('comment', '')
         transaction_id = data.get('transaction_id')
@@ -179,7 +180,7 @@ def submit_ticket_feedback(ticket_id):
         if errors:
             return jsonify({"message": "Validation errors", "errors": errors}), 400
         
-        current_user_id = int(get_jwt_identity())
+        current_user_id = get_current_user_id()
         rating = data['rating']
         comment = data.get('comment', '')
         

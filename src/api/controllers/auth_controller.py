@@ -1,6 +1,7 @@
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from datetime import datetime
+from utils.jwt_helpers import get_current_user_id
 from services.auth_service import (
     AuthService,
     VerificationCodeExpiredError,
@@ -256,7 +257,7 @@ def verify_account():
         if errors:
             return jsonify({"message": "Validation errors", "errors": errors}), 400
 
-        current_user_id = int(get_jwt_identity())
+        current_user_id = get_current_user_id()
 
         # Use AuthService for verification
         result = auth_service.verify_user(current_user_id, data['verification_code'])
@@ -321,7 +322,7 @@ def resend_verification():
           description: Unauthorized
     """
     try:
-        current_user_id = int(get_jwt_identity())
+        current_user_id = get_current_user_id()
 
         # Use AuthService to resend verification code
         result = auth_service.resend_verification_code(current_user_id)

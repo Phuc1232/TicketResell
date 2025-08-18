@@ -1,5 +1,6 @@
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
+from utils.jwt_helpers import get_current_user_id
 from marshmallow import Schema, fields, validate
 from datetime import datetime
 from services.support_service import SupportService
@@ -73,7 +74,7 @@ def create_support_ticket():
         if errors:
             return jsonify({"message": "Validation errors", "errors": errors}), 400
         
-        current_user_id = int(get_jwt_identity())
+        current_user_id = get_current_user_id()
         
         support = support_service.create_support_ticket(
             user_id=current_user_id,
@@ -113,7 +114,7 @@ def get_user_support_tickets():
           description: Support tickets retrieved successfully
     """
     try:
-        current_user_id = int(get_jwt_identity())
+        current_user_id = get_current_user_id()
         
         support_tickets = support_service.get_user_support_tickets(current_user_id)
         

@@ -1,5 +1,6 @@
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
+from utils.jwt_helpers import get_current_user_id
 from marshmallow import Schema, fields, validate
 import uuid
 from datetime import datetime
@@ -90,7 +91,7 @@ def initiate_transaction():
         if errors:
             return jsonify({"message": "Validation errors", "errors": errors}), 400
         
-        current_user_id = int(get_jwt_identity())
+        current_user_id = get_current_user_id()
         ticket_id = data['ticket_id']
         payment_method = data['payment_method']
         amount = data['amount']
@@ -213,7 +214,7 @@ def get_transaction_status(transaction_id):
           description: Transaction not found
     """
     try:
-        current_user_id = int(get_jwt_identity())
+        current_user_id = get_current_user_id()
         
         # TODO: Implement transaction status retrieval
         # 1. Get transaction record from database
