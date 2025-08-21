@@ -141,10 +141,9 @@ class AdminService:
                 log_message += f" - Reason: {reason}"
             logger.warning(log_message)
             
-            # Perform deletion
+            # Perform hard deletion (cascade delete related data)
             self.user_repository.delete(target_user_id)
-            
-            logger.info(f"User {target_user_id} successfully deleted by admin {admin_user_id}")
+            logger.info(f"User {target_user_id} successfully HARD DELETED by admin {admin_user_id}")
             return True
             
         except Exception as e:

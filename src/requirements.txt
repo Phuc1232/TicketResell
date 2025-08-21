@@ -14,3 +14,4 @@ flask-swagger-ui
 Flask-JWT-Extended
 Werkzeug
 flask-dotenv
+flask_socketio

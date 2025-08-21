@@ -42,9 +42,10 @@ spec.components.schema("UserVerification", schema=UserVerificationSchema)
 spec.components.schema("UserRating", schema=UserRatingSchema)
 
 # Payment Schemas
-from api.controllers.transaction_controller import TransactionInitiateSchema, TransactionCallbackSchema
+from api.controllers.transaction_controller import TransactionInitiateSchema, TransactionCallbackSchema, BuyTicketSchema
 spec.components.schema("TransactionInitiate", schema=TransactionInitiateSchema)
 spec.components.schema("TransactionCallback", schema=TransactionCallbackSchema)
+spec.components.schema("BuyTicket", schema=BuyTicketSchema)
 
 # Chat Schemas
 from api.controllers.chat_controller import MessageSchema, ChatRoomSchema

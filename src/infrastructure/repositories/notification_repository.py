@@ -72,7 +72,22 @@ class NotificationRepository(INotificationRepository):
             self.session.commit()
             return True
         return False
-    
+
+    def delete_older_than(self, cutoff_date) -> int:
+        from datetime import datetime
+        deleted_count = self.session.query(NotificationModel).filter(
+            NotificationModel.CreatedAt < cutoff_date
+        ).delete()
+        self.session.commit()
+        return deleted_count
+
+    def get_by_type(self, user_id: int, notification_type: str, limit: int = 20, offset: int = 0) -> List[Notification]:
+        models = self.session.query(NotificationModel).filter(
+            NotificationModel.UserID == user_id,
+            NotificationModel.Type == notification_type
+        ).order_by(NotificationModel.CreatedAt.desc()).offset(offset).limit(limit).all()
+        return [self._to_domain(model) for model in models]
+
     def _to_domain(self, model: NotificationModel) -> Notification:
         return Notification(
             NotificationID=model.NotificationID,

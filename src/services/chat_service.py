@@ -88,3 +88,44 @@ class ChatService:
             raise ValueError("Message not found or access denied")
         
         return self.message_repository.delete(message_id)
+
+    def search_messages(self, user_id: int, query: str, other_user_id: Optional[int] = None, limit: int = 20, offset: int = 0) -> List[Message]:
+        """Search messages by content for a specific user"""
+        # Validate user exists
+        user = self.user_repository.get_by_id(user_id)
+        if not user:
+            raise ValueError("User not found")
+
+        # Validate other user if provided
+        if other_user_id:
+            other_user = self.user_repository.get_by_id(other_user_id)
+            if not other_user:
+                raise ValueError("Other user not found")
+
+        return self.message_repository.search_messages(user_id, query, other_user_id, limit, offset)
+
+    def get_user_chat_stats(self, user_id: int) -> dict:
+        """Get chat statistics for a user"""
+        # Validate user exists
+        user = self.user_repository.get_by_id(user_id)
+        if not user:
+            raise ValueError("User not found")
+
+        return self.message_repository.get_user_stats(user_id)
+
+    def get_message_by_id(self, message_id: int, user_id: int) -> Optional[Message]:
+        """Get a specific message if user has access to it"""
+        # Validate user exists
+        user = self.user_repository.get_by_id(user_id)
+        if not user:
+            raise ValueError("User not found")
+
+        message = self.message_repository.get_by_id(message_id)
+        if not message:
+            return None
+
+        # Check if user has access to this message
+        if message.SenderID != user_id and message.ReceiverID != user_id:
+            raise ValueError("Access denied")
+
+        return message

@@ -104,3 +104,73 @@ class MessageRepository(IMessageRepository):
             SentAt=model.SentAt,
             ReadAt=model.ReadAt
         )
+
+    def search_messages(self, user_id: int, query: str, other_user_id: Optional[int] = None, limit: int = 20, offset: int = 0) -> List[Message]:
+        """Search messages by content"""
+        query_filter = MessageModel.Content.ilike(f'%{query}%')
+
+        # Base filter - user must be sender or receiver
+        user_filter = (MessageModel.SenderID == user_id) | (MessageModel.ReceiverID == user_id)
+
+        # If other_user_id specified, filter conversation
+        if other_user_id:
+            conversation_filter = (
+                ((MessageModel.SenderID == user_id) & (MessageModel.ReceiverID == other_user_id)) |
+                ((MessageModel.SenderID == other_user_id) & (MessageModel.ReceiverID == user_id))
+            )
+            user_filter = conversation_filter
+
+        models = self.session.query(MessageModel).filter(
+            query_filter & user_filter
+        ).order_by(MessageModel.SentAt.desc()).offset(offset).limit(limit).all()
+
+        return [self._to_domain(model) for model in models]
+
+    def get_user_stats(self, user_id: int) -> dict:
+        """Get chat statistics for a user"""
+        from datetime import datetime, timedelta
+
+        # Total messages sent
+        messages_sent = self.session.query(MessageModel).filter(MessageModel.SenderID == user_id).count()
+
+        # Total messages received
+        messages_received = self.session.query(MessageModel).filter(MessageModel.ReceiverID == user_id).count()
+
+        # Unread messages
+        unread_messages = self.session.query(MessageModel).filter(
+            (MessageModel.ReceiverID == user_id) & (MessageModel.IsRead == False)
+        ).count()
+
+        # Total conversations (unique users)
+        sent_to = self.session.query(MessageModel.ReceiverID).filter(MessageModel.SenderID == user_id).distinct().all()
+        received_from = self.session.query(MessageModel.SenderID).filter(MessageModel.ReceiverID == user_id).distinct().all()
+
+        unique_users = set()
+        for (user,) in sent_to:
+            unique_users.add(user)
+        for (user,) in received_from:
+            unique_users.add(user)
+
+        total_conversations = len(unique_users)
+
+        # Active conversations (last 7 days)
+        seven_days_ago = datetime.now() - timedelta(days=7)
+        active_conversations_query = self.session.query(MessageModel).filter(
+            ((MessageModel.SenderID == user_id) | (MessageModel.ReceiverID == user_id)) &
+            (MessageModel.SentAt >= seven_days_ago)
+        ).all()
+
+        active_users = set()
+        for msg in active_conversations_query:
+            partner_id = msg.ReceiverID if msg.SenderID == user_id else msg.SenderID
+            active_users.add(partner_id)
+
+        active_conversations = len(active_users)
+
+        return {
+            "total_conversations": total_conversations,
+            "total_messages_sent": messages_sent,
+            "total_messages_received": messages_received,
+            "unread_messages": unread_messages,
+            "active_conversations": active_conversations
+        }

@@ -7,7 +7,7 @@ class UserRegisterSchema(Schema):
     password = fields.Str(required=True, validate=validate.Length(min=6))
     email = fields.Email(required=True)
     date_of_birth = fields.Date(required=True)
-    role_id = fields.Int(required=True, validate=validate.OneOf([1, 2]))  # 1=Admin, 2=User
+    role_id = fields.Int(required=False, validate=validate.OneOf([1, 2, 3, 4]))  # Optional, auto-assigned
 
 class UserLoginSchema(Schema):
     email = fields.Email(required=True)

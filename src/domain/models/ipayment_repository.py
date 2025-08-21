@@ -30,3 +30,11 @@ class IPaymentRepository(ABC):
     @abstractmethod
     def get_by_status(self, status: str) -> List[Payment]:
         pass
+
+    @abstractmethod
+    def get_user_payments_paginated(self, user_id: int, limit: int, offset: int) -> List[Payment]:
+        pass
+
+    @abstractmethod
+    def get_user_payments_count(self, user_id: int) -> int:
+        pass

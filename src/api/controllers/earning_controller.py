@@ -7,6 +7,9 @@ from services.earning_service import EarningService
 from infrastructure.repositories.earning_repository import EarningRepository
 from infrastructure.repositories.user_repository import UserRepository
 from infrastructure.databases.mssql import session
+import logging
+
+logger = logging.getLogger(__name__)
 
 bp = Blueprint('earning', __name__, url_prefix='/api/earnings')
 
@@ -275,3 +278,210 @@ def get_earnings_by_date_range():
         return jsonify({"message": str(e)}), 404
     except Exception as e:
         return jsonify({"message": "Error retrieving earnings", "error": str(e)}), 500
+
+
+@bp.route('/statistics', methods=['GET'])
+@jwt_required()
+def get_earnings_statistics():
+    """
+    Get comprehensive earnings statistics for current user
+    ---
+    get:
+      summary: Get comprehensive earnings statistics
+      security:
+        - BearerAuth: []
+      tags:
+        - Earnings
+      responses:
+        200:
+          description: Earnings statistics retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  user_id:
+                    type: integer
+                  total_earnings:
+                    type: number
+                  total_transactions:
+                    type: integer
+                  average_earning:
+                    type: number
+                  monthly_earnings:
+                    type: object
+                  recent_earnings:
+                    type: array
+                  earnings_trend:
+                    type: string
+        404:
+          description: User not found
+    """
+    try:
+        current_user_id = get_current_user_id()
+
+        stats = earning_service.get_earnings_statistics(current_user_id)
+
+        return jsonify({
+            **stats,
+            "message": "Earnings statistics retrieved successfully"
+        }), 200
+
+    except ValueError as e:
+        return jsonify({"message": str(e)}), 404
+    except Exception as e:
+        logger.error(f"Error retrieving earnings statistics: {e}")
+        return jsonify({"message": "Error retrieving earnings statistics", "error": str(e)}), 500
+
+
+@bp.route('/summary', methods=['GET'])
+@jwt_required()
+def get_earnings_summary():
+    """
+    Get earnings summary for different time periods
+    ---
+    get:
+      summary: Get earnings summary for different time periods
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: period
+          in: query
+          schema:
+            type: string
+            enum: [all, year, month, week]
+            default: all
+          description: Time period for summary
+      tags:
+        - Earnings
+      responses:
+        200:
+          description: Earnings summary retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  user_id:
+                    type: integer
+                  period:
+                    type: string
+                  total_amount:
+                    type: number
+                  transaction_count:
+                    type: integer
+                  average_amount:
+                    type: number
+                  highest_earning:
+                    type: number
+                  lowest_earning:
+                    type: number
+        400:
+          description: Invalid period
+        404:
+          description: User not found
+    """
+    try:
+        current_user_id = get_current_user_id()
+
+        period = request.args.get('period', 'all')
+        valid_periods = ['all', 'year', 'month', 'week']
+
+        if period not in valid_periods:
+            return jsonify({
+                "message": f"Invalid period. Must be one of: {valid_periods}"
+            }), 400
+
+        summary = earning_service.get_earnings_summary(current_user_id, period)
+
+        return jsonify({
+            **summary,
+            "message": f"Earnings summary for '{period}' period retrieved successfully"
+        }), 200
+
+    except ValueError as e:
+        return jsonify({"message": str(e)}), 404
+    except Exception as e:
+        logger.error(f"Error retrieving earnings summary: {e}")
+        return jsonify({"message": "Error retrieving earnings summary", "error": str(e)}), 500
+
+
+@bp.route('/calculate', methods=['POST'])
+@jwt_required()
+def calculate_earnings():
+    """
+    Calculate earnings from transaction amount
+    ---
+    post:
+      summary: Calculate earnings from transaction amount
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                transaction_amount:
+                  type: number
+                  minimum: 0
+                platform_commission:
+                  type: number
+                  minimum: 0
+                  maximum: 1
+                  default: 0.05
+              required:
+                - transaction_amount
+      tags:
+        - Earnings
+      responses:
+        200:
+          description: Earnings calculated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  transaction_amount:
+                    type: number
+                  platform_commission_rate:
+                    type: number
+                  commission_amount:
+                    type: number
+                  seller_earnings:
+                    type: number
+                  net_percentage:
+                    type: number
+        400:
+          description: Invalid input data
+    """
+    try:
+        current_user_id = get_current_user_id()
+
+        data = request.get_json()
+        if not data:
+            return jsonify({"message": "Request body is required"}), 400
+
+        transaction_amount = data.get('transaction_amount')
+        if transaction_amount is None or transaction_amount < 0:
+            return jsonify({"message": "Valid transaction_amount is required"}), 400
+
+        platform_commission = data.get('platform_commission', 0.05)
+        if platform_commission < 0 or platform_commission > 1:
+            return jsonify({"message": "Platform commission must be between 0 and 1"}), 400
+
+        calculation = earning_service.calculate_seller_earnings(
+            current_user_id, transaction_amount, platform_commission
+        )
+
+        return jsonify({
+            **calculation,
+            "message": "Earnings calculated successfully"
+        }), 200
+
+    except ValueError as e:
+        return jsonify({"message": str(e)}), 404
+    except Exception as e:
+        logger.error(f"Error calculating earnings: {e}")
+        return jsonify({"message": "Error calculating earnings", "error": str(e)}), 500

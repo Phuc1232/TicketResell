@@ -14,6 +14,10 @@ class TicketService:
     def get_ticket(self, ticket_id: int) -> Optional[Ticket]:
         return self.ticket_repository.get_by_id(ticket_id)
 
+    def get_ticket_by_event_and_owner(self, event_name: str, owner_username: str) -> Optional[Ticket]:
+        """Get ticket by event name and owner username"""
+        return self.ticket_repository.get_by_event_name_and_owner(event_name, owner_username)
+
     def create_ticket(self, EventDate, Price, EventName, Status, PaymentMethod, ContactInfo, OwnerID) -> Ticket:
         ticket = Ticket(
             TicketID=None,

@@ -13,7 +13,7 @@ class UserModel(Base):
     Email = Column(String(100), nullable=False, unique=True)
     Date_Of_Birth = Column(DateTime, nullable=False)
     Create_Date = Column(DateTime)
-    RoleID = Column(Integer, ForeignKey('roles.RoleID'), default=2)
+    RoleID = Column(Integer, ForeignKey('roles.RoleID'), nullable=False)
 
     # Verification fields
     verified = Column(Boolean, default=False, nullable=False)

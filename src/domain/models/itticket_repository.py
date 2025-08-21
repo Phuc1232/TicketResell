@@ -12,6 +12,10 @@ class ITicketRepository(ABC):
         pass
 
     @abstractmethod
+    def get_by_event_name_and_owner(self, event_name: str, owner_username: str) -> Optional[Ticket]:
+        pass
+
+    @abstractmethod
     def list(self) -> List[Ticket]:
         pass
 

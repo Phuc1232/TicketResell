@@ -339,3 +339,256 @@ def mark_messages_read(other_user_id):
         return jsonify({"message": str(e)}), 404
     except Exception as e:
         return jsonify({"message": "Error marking messages as read", "error": str(e)}), 500
+
+@bp.route('/unread-count', methods=['GET'])
+@jwt_required()
+def get_unread_count():
+    """
+    Get unread messages count
+    ---
+    get:
+      summary: Get total unread messages count for current user
+      security:
+        - BearerAuth: []
+      tags:
+        - Chat
+      responses:
+        200:
+          description: Unread count retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  unread_count:
+                    type: integer
+                  message:
+                    type: string
+    """
+    try:
+        current_user_id = get_current_user_id()
+
+        unread_count = chat_service.get_unread_count(current_user_id)
+
+        return jsonify({
+            "unread_count": unread_count,
+            "message": "Unread count retrieved successfully"
+        }), 200
+
+    except ValueError as e:
+        return jsonify({"message": str(e)}), 404
+    except Exception as e:
+        return jsonify({"message": "Error retrieving unread count", "error": str(e)}), 500
+
+@bp.route('/messages/<int:message_id>', methods=['DELETE'])
+@jwt_required()
+def delete_message(message_id):
+    """
+    Delete a message
+    ---
+    delete:
+      summary: Delete a message (only sender can delete)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: message_id
+          in: path
+          required: true
+          schema:
+            type: integer
+          description: ID of the message to delete
+      tags:
+        - Chat
+      responses:
+        200:
+          description: Message deleted successfully
+        403:
+          description: Access denied - not message owner
+        404:
+          description: Message not found
+    """
+    try:
+        current_user_id = get_current_user_id()
+
+        success = chat_service.delete_message(message_id, current_user_id)
+
+        if success:
+            return jsonify({
+                "message": "Message deleted successfully",
+                "message_id": message_id
+            }), 200
+        else:
+            return jsonify({
+                "message": "Failed to delete message"
+            }), 500
+
+    except ValueError as e:
+        error_msg = str(e)
+        if "access denied" in error_msg.lower():
+            return jsonify({"message": error_msg}), 403
+        return jsonify({"message": error_msg}), 404
+    except Exception as e:
+        return jsonify({"message": "Error deleting message", "error": str(e)}), 500
+
+@bp.route('/search', methods=['GET'])
+@jwt_required()
+def search_messages():
+    """
+    Search messages
+    ---
+    get:
+      summary: Search messages by content
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: query
+          in: query
+          required: true
+          schema:
+            type: string
+            minLength: 1
+          description: Search query
+        - name: other_user_id
+          in: query
+          schema:
+            type: integer
+          description: Optional - search only in conversation with specific user
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+          description: Number of results to return
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            default: 0
+          description: Number of results to skip
+      tags:
+        - Chat
+      responses:
+        200:
+          description: Search results retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  messages:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        message_id:
+                          type: integer
+                        content:
+                          type: string
+                        sender_id:
+                          type: integer
+                        receiver_id:
+                          type: integer
+                        sent_at:
+                          type: string
+                          format: date-time
+                  total:
+                    type: integer
+        400:
+          description: Invalid search query
+    """
+    try:
+        current_user_id = get_current_user_id()
+        query = request.args.get('query', '').strip()
+        other_user_id = request.args.get('other_user_id', type=int)
+        limit = request.args.get('limit', 20, type=int)
+        offset = request.args.get('offset', 0, type=int)
+
+        if not query:
+            return jsonify({"message": "Search query is required"}), 400
+
+        if len(query) < 1:
+            return jsonify({"message": "Search query must be at least 1 character"}), 400
+
+        # Use ChatService to search messages
+        messages = chat_service.search_messages(
+            user_id=current_user_id,
+            query=query,
+            other_user_id=other_user_id,
+            limit=limit,
+            offset=offset
+        )
+
+        # Convert to response format
+        message_list = []
+        for msg in messages:
+            message_list.append({
+                "message_id": msg.MessageID,
+                "content": msg.Content,
+                "sender_id": msg.SenderID,
+                "receiver_id": msg.ReceiverID,
+                "ticket_id": msg.TicketID,
+                "sent_at": msg.SentAt.isoformat(),
+                "is_read": msg.IsRead
+            })
+
+        return jsonify({
+            "messages": message_list,
+            "total": len(message_list),
+            "query": query,
+            "limit": limit,
+            "offset": offset,
+            "message": "Search results retrieved successfully"
+        }), 200
+
+    except ValueError as e:
+        return jsonify({"message": str(e)}), 404
+    except Exception as e:
+        return jsonify({"message": "Error searching messages", "error": str(e)}), 500
+
+@bp.route('/stats', methods=['GET'])
+@jwt_required()
+def get_chat_stats():
+    """
+    Get chat statistics
+    ---
+    get:
+      summary: Get chat statistics for current user
+      security:
+        - BearerAuth: []
+      tags:
+        - Chat
+      responses:
+        200:
+          description: Chat statistics retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  total_conversations:
+                    type: integer
+                  total_messages_sent:
+                    type: integer
+                  total_messages_received:
+                    type: integer
+                  unread_messages:
+                    type: integer
+                  active_conversations:
+                    type: integer
+                    description: Conversations with messages in last 7 days
+    """
+    try:
+        current_user_id = get_current_user_id()
+
+        # Get chat statistics
+        stats = chat_service.get_user_chat_stats(current_user_id)
+
+        return jsonify({
+            **stats,
+            "message": "Chat statistics retrieved successfully"
+        }), 200
+
+    except ValueError as e:
+        return jsonify({"message": str(e)}), 404
+    except Exception as e:
+        return jsonify({"message": "Error retrieving chat statistics", "error": str(e)}), 500

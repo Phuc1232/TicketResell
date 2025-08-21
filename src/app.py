@@ -14,11 +14,11 @@ import logging
 try:
     from dotenv import load_dotenv
     load_dotenv()
-    print("✅ .env file loaded successfully")
+    print(".env file loaded successfully")
 except ImportError:
-    print("⚠️  python-dotenv not installed. Using system environment variables only.")
+    print("WARNING: python-dotenv not installed. Using system environment variables only.")
 except Exception as e:
-    print(f"⚠️  Error loading .env file: {e}")
+    print(f"WARNING: Error loading .env file: {e}")
 from flask_jwt_extended import JWTManager
 
 # Setup logging
@@ -34,7 +34,7 @@ def _seed_admin_user():
     Seed admin user sau khi database được khởi tạo
     """
     try:
-        logger.info("🌱 Starting admin seed process...")
+        logger.info("Starting admin seed process...")
 
         # Import dependencies (lazy import để tránh circular imports)
         from database.seed_admin import seed_default_admin
@@ -48,14 +48,14 @@ def _seed_admin_user():
         success = seed_default_admin(user_repository)
 
         if success:
-            logger.info("✅ Admin seed process completed successfully!")
+            logger.info("Admin seed process completed successfully!")
         else:
-            logger.warning("⚠️ Admin seed process completed with warnings")
+            logger.warning("Admin seed process completed with warnings")
 
     except Exception as e:
-        logger.error(f"❌ Admin seed process failed: {e}")
+        logger.error(f"Admin seed process failed: {e}")
         # Không crash app nếu seed thất bại
-        logger.warning("⚠️ Application will continue without admin seed")
+        logger.warning("Application will continue without admin seed")
 
 
 def create_app():
@@ -94,7 +94,7 @@ def create_app():
     with app.test_request_context():
         for rule in app.url_map.iter_rules():
             # Thêm tất cả endpoints cho Swagger
-            if rule.endpoint.startswith(('ticket.', 'user.', 'auth.', 'admin.', 'transaction.', 'chat.', 'notifications.', 'feedback.', 'payment.', 'earning.', 'support.')):
+            if rule.endpoint.startswith(('ticket.', 'user.', 'auth.', 'admin.', 'transactions.', 'chat.', 'notifications.', 'feedback.', 'payment.', 'earning.', 'support.')):
                 view_func = app.view_functions[rule.endpoint]
                 print(f"Adding path: {rule.rule} -> {view_func}")
                 spec.path(view=view_func)

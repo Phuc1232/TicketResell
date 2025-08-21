@@ -27,8 +27,14 @@ class PaymentCreateSchema(Schema):
 class PaymentUpdateSchema(Schema):
     status = fields.Str(required=True, validate=validate.OneOf(['pending', 'success', 'failed', 'cancelled']))
 
+class PaymentProcessSchema(Schema):
+    payment_method_data = fields.Dict(load_default={})
+    confirmation_code = fields.Str()
+    gateway_response = fields.Dict(load_default={})
+
 payment_create_schema = PaymentCreateSchema()
 payment_update_schema = PaymentUpdateSchema()
+payment_process_schema = PaymentProcessSchema()
 
 @bp.route('/', methods=['POST'])
 @jwt_required()
@@ -251,3 +257,214 @@ def update_payment_status(payment_id):
         
     except Exception as e:
         return jsonify({"message": "Error updating payment status", "error": str(e)}), 500
+
+
+@bp.route('/<int:payment_id>/process', methods=['POST'])
+@jwt_required()
+def process_payment(payment_id):
+    """
+    Process payment through payment gateway
+    ---
+    post:
+      summary: Process payment through payment gateway
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: payment_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                payment_method_data:
+                  type: object
+                  description: Additional payment method specific data
+                confirmation_code:
+                  type: string
+                  description: Confirmation code for manual payments
+                gateway_response:
+                  type: object
+                  description: Response from payment gateway
+      tags:
+        - Payments
+      responses:
+        200:
+          description: Payment processed successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  payment_id:
+                    type: integer
+                  status:
+                    type: string
+                  message:
+                    type: string
+                  transaction_reference:
+                    type: string
+        400:
+          description: Invalid payment data
+        404:
+          description: Payment not found
+    """
+    try:
+        data = request.get_json() or {}
+
+        errors = payment_process_schema.validate(data)
+        if errors:
+            return jsonify({"message": "Validation errors", "errors": errors}), 400
+
+        result = payment_service.process_payment(payment_id, data)
+
+        return jsonify({
+            "payment_id": result['payment_id'],
+            "status": result['status'],
+            "message": result['message'],
+            "transaction_reference": result.get('transaction_reference'),
+            "processed_at": datetime.now().isoformat()
+        }), 200
+
+    except ValueError as e:
+        return jsonify({"message": str(e)}), 400
+    except Exception as e:
+        return jsonify({"message": "Error processing payment", "error": str(e)}), 500
+
+
+@bp.route('/history', methods=['GET'])
+@jwt_required()
+def get_payment_history():
+    """
+    Get paginated payment history for current user
+    ---
+    get:
+      summary: Get paginated payment history
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+            minimum: 1
+            maximum: 100
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            default: 0
+            minimum: 0
+      tags:
+        - Payments
+      responses:
+        200:
+          description: Payment history retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  payments:
+                    type: array
+                    items:
+                      type: object
+                  total_count:
+                    type: integer
+                  limit:
+                    type: integer
+                  offset:
+                    type: integer
+                  has_more:
+                    type: boolean
+    """
+    try:
+        current_user_id = get_current_user_id()
+
+        limit = min(int(request.args.get('limit', 20)), 100)
+        offset = max(int(request.args.get('offset', 0)), 0)
+
+        result = payment_service.get_payment_history(current_user_id, limit, offset)
+
+        payment_list = []
+        for payment in result['payments']:
+            payment_list.append({
+                "payment_id": payment.PaymentID,
+                "methods": payment.Methods,
+                "status": payment.Status,
+                "amount": payment.amount,
+                "title": payment.Title,
+                "paid_at": payment.Paid_at.isoformat() if payment.Paid_at else None,
+                "transaction_id": payment.TransactionID
+            })
+
+        return jsonify({
+            "payments": payment_list,
+            "total_count": result['total_count'],
+            "limit": result['limit'],
+            "offset": result['offset'],
+            "has_more": result['has_more'],
+            "message": "Payment history retrieved successfully"
+        }), 200
+
+    except ValueError as e:
+        return jsonify({"message": str(e)}), 404
+    except Exception as e:
+        return jsonify({"message": "Error retrieving payment history", "error": str(e)}), 500
+
+
+@bp.route('/statistics', methods=['GET'])
+@jwt_required()
+def get_payment_statistics():
+    """
+    Get payment statistics for current user
+    ---
+    get:
+      summary: Get payment statistics
+      security:
+        - BearerAuth: []
+      tags:
+        - Payments
+      responses:
+        200:
+          description: Payment statistics retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  total_payments:
+                    type: integer
+                  successful_payments:
+                    type: integer
+                  failed_payments:
+                    type: integer
+                  pending_payments:
+                    type: integer
+                  total_amount:
+                    type: number
+                  success_rate:
+                    type: number
+                  method_breakdown:
+                    type: object
+    """
+    try:
+        current_user_id = get_current_user_id()
+
+        stats = payment_service.get_payment_statistics(current_user_id)
+
+        return jsonify({
+            **stats,
+            "message": "Payment statistics retrieved successfully"
+        }), 200
+
+    except ValueError as e:
+        return jsonify({"message": str(e)}), 404
+    except Exception as e:
+        return jsonify({"message": "Error retrieving payment statistics", "error": str(e)}), 500

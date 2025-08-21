@@ -66,8 +66,8 @@ class AuthService:
         verification_code = self._generate_verification_code()
         verification_expires_at = datetime.utcnow() + timedelta(minutes=5)
 
-        # Get or create default role
-        default_role_id = self._get_or_create_user_role()
+        # Get default user role ID (fixed ID = 2)
+        default_role_id = self._get_default_user_role_id()
 
         # Create user with unverified status
         user = User(
@@ -339,52 +339,37 @@ class AuthService:
         
         return True
     
-    def _get_or_create_user_role(self) -> int:
+    def _get_default_user_role_id(self) -> int:
         """
-        Get or create default user role with auto-increment ID
+        Get default user role ID (fixed ID = 2)
 
         Returns:
-            int: Role ID for default user role
+            int: Default user role ID
+
+        Raises:
+            ValueError: If User role doesn't exist in database
         """
         try:
             from infrastructure.models.role_model import RoleModel
             from infrastructure.databases.mssql import session
 
-            # Try to find existing "User" role
-            user_role = session.query(RoleModel).filter(RoleModel.RoleName == 'User').first()
+            # Check if User role (ID=2) exists
+            user_role = session.query(RoleModel).filter(RoleModel.RoleID == 2).first()
             if user_role:
-                return user_role.RoleID
+                return 2
 
-            # Try to find existing "Customer" role
-            customer_role = session.query(RoleModel).filter(RoleModel.RoleName == 'Customer').first()
-            if customer_role:
-                return customer_role.RoleID
-
-            # If no user-type roles exist, create "User" role with auto-increment ID
-            new_role = RoleModel(RoleName='User')  # RoleID will auto-increment
-            session.add(new_role)
-            session.commit()
-            session.refresh(new_role)  # Get the auto-generated ID
-
-            return new_role.RoleID
+            # If role doesn't exist, raise error with helpful message
+            raise ValueError(
+                "User role (ID=2) not found in database. "
+                "Please run role seeding script: python src/database/seed_roles.py"
+            )
 
         except Exception as e:
-            # Fallback: try to find any existing role
-            try:
-                any_role = session.query(RoleModel).first()
-                if any_role:
-                    return any_role.RoleID
-
-                # If no roles exist at all, create first role
-                first_role = RoleModel(RoleName='DefaultUser')
-                session.add(first_role)
-                session.commit()
-                session.refresh(first_role)
-                return first_role.RoleID
-
-            except Exception:
-                # Ultimate fallback - return 1 and hope for the best
-                return 1
+            logger.error(f"Error getting default user role: {e}")
+            raise ValueError(
+                "Failed to get default user role. "
+                "Please ensure roles are properly seeded in database."
+            )
 
     def _generate_verification_code(self) -> str:
         """

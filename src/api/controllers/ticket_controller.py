@@ -220,23 +220,70 @@ def create_ticket():
     except Exception as e:
         return jsonify({"message": "Error creating ticket", "error": str(e)}), 500
 
-@bp.route('/<int:ticket_id>', methods=['PUT'])
-@jwt_required()
-def update_ticket(ticket_id):
+@bp.route('/<event_name>/<owner_username>', methods=['GET'])
+def get_ticket_by_event_and_owner(event_name, owner_username):
     """
-    Update a ticket by ID (owner only)
+    Get ticket by event name and owner username
     ---
-    put:
-      summary: Update a ticket by ID
-      security:
-        - BearerAuth: []
+    get:
+      summary: Get ticket by event name and owner username
       parameters:
-        - name: ticket_id
+        - name: event_name
           in: path
           required: true
           schema:
-            type: integer
-          description: ID of the ticket to update
+            type: string
+          description: Name of the event
+        - name: owner_username
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Username of the ticket owner
+      tags:
+        - Tickets
+      responses:
+        200:
+          description: Ticket details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TicketResponse'
+        404:
+          description: Ticket not found
+    """
+    try:
+        ticket = ticket_service.get_ticket_by_event_and_owner(event_name, owner_username)
+        if not ticket:
+            return jsonify({"message": "Ticket not found"}), 404
+
+        return jsonify(response_schema.dump(ticket)), 200
+    except Exception as e:
+        return jsonify({"message": "Error retrieving ticket", "error": str(e)}), 500
+
+@bp.route('/<event_name>/<owner_username>', methods=['PUT'])
+@jwt_required()
+def update_ticket(event_name, owner_username):
+    """
+    Update a ticket by event name and owner username (owner only)
+    ---
+    put:
+      summary: Update a ticket by event name and owner username
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: event_name
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Name of the event
+        - name: owner_username
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Username of the ticket owner
       requestBody:
         required: true
         content:
@@ -326,12 +373,12 @@ def update_ticket(ticket_id):
             
         # Get current user ID from JWT token
         current_user_id = get_current_user_id()
-        
+
         # Check if ticket exists and belongs to current user
-        existing_ticket = ticket_service.get_ticket(ticket_id)
+        existing_ticket = ticket_service.get_ticket_by_event_and_owner(event_name, owner_username)
         if not existing_ticket:
             return jsonify({'message': 'Ticket not found'}), 404
-        
+
         if existing_ticket.OwnerID != current_user_id:
             return jsonify({"message": "Forbidden - Can only update your own tickets"}), 403
         
@@ -343,7 +390,7 @@ def update_ticket(ticket_id):
             return jsonify({"message": "Validation errors", "errors": errors}), 400
         
         ticket = ticket_service.update_ticket(
-            ticket_id=ticket_id,
+            ticket_id=existing_ticket.TicketID,
             EventName=data['EventName'],
             EventDate=data['EventDate'],
             Price=data['Price'],
@@ -767,23 +814,29 @@ def rate_ticket(ticket_id):
     except Exception as e:
         return jsonify({"message": "Error updating rating", "error": str(e)}), 500
 
-@bp.route('/<int:ticket_id>', methods=['DELETE'])
+@bp.route('/<event_name>/<owner_username>', methods=['DELETE'])
 @jwt_required()
-def delete_ticket(ticket_id):
+def delete_ticket(event_name, owner_username):
     """
-    Delete a ticket by ID (owner only)
+    Delete a ticket by event name and owner username (owner only)
     ---
     delete:
-      summary: Delete a ticket by ID
+      summary: Delete a ticket by event name and owner username
       security:
         - BearerAuth: []
       parameters:
-        - name: ticket_id
+        - name: event_name
           in: path
           required: true
           schema:
-            type: integer
-          description: ID of the ticket to delete
+            type: string
+          description: Name of the event
+        - name: owner_username
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Username of the ticket owner
       tags:
         - Tickets
       responses:
@@ -820,16 +873,16 @@ def delete_ticket(ticket_id):
     try:
         # Get current user ID from JWT token
         current_user_id = get_current_user_id()
-        
+
         # Check if ticket exists and belongs to current user
-        existing_ticket = ticket_service.get_ticket(ticket_id)
+        existing_ticket = ticket_service.get_ticket_by_event_and_owner(event_name, owner_username)
         if not existing_ticket:
             return jsonify({'message': 'Ticket not found'}), 404
-        
+
         if existing_ticket.OwnerID != current_user_id:
             return jsonify({"message": "Forbidden - Can only delete your own tickets"}), 403
-        
-        success = ticket_service.delete_ticket(ticket_id)
+
+        success = ticket_service.delete_ticket(existing_ticket.TicketID)
         return '', 204
     except Exception as e:
         return jsonify({"message": "Error deleting ticket", "error": str(e)}), 500

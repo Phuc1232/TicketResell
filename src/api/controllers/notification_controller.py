@@ -3,8 +3,20 @@ from flask_jwt_extended import jwt_required, get_jwt_identity
 from utils.jwt_helpers import get_current_user_id
 from marshmallow import Schema, fields, validate
 from datetime import datetime
+from services.notification_service import NotificationService
+from infrastructure.repositories.notification_repository import NotificationRepository
+from infrastructure.repositories.user_repository import UserRepository
+from infrastructure.databases.mssql import session
+import logging
+
+logger = logging.getLogger(__name__)
 
 bp = Blueprint('notifications', __name__, url_prefix='/api/notifications')
+
+# Initialize services
+notification_repository = NotificationRepository(session)
+user_repository = UserRepository(session)
+notification_service = NotificationService(notification_repository, user_repository)
 
 # Schemas
 class NotificationPreferencesSchema(Schema):
@@ -327,3 +339,242 @@ def update_notification_preferences():
         
     except Exception as e:
         return jsonify({"message": "Error updating notification preferences", "error": str(e)}), 500
+
+
+@bp.route('/statistics', methods=['GET'])
+@jwt_required()
+def get_notification_statistics():
+    """
+    Get notification statistics for current user
+    ---
+    get:
+      summary: Get notification statistics
+      security:
+        - BearerAuth: []
+      tags:
+        - Notifications
+      responses:
+        200:
+          description: Notification statistics retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  user_id:
+                    type: integer
+                  total_notifications:
+                    type: integer
+                  unread_count:
+                    type: integer
+                  read_count:
+                    type: integer
+                  type_breakdown:
+                    type: object
+                  recent_activity_count:
+                    type: integer
+                  read_percentage:
+                    type: number
+    """
+    try:
+        current_user_id = get_current_user_id()
+
+        stats = notification_service.get_notification_statistics(current_user_id)
+
+        return jsonify({
+            **stats,
+            "message": "Notification statistics retrieved successfully"
+        }), 200
+
+    except ValueError as e:
+        return jsonify({"message": str(e)}), 404
+    except Exception as e:
+        logger.error(f"Error retrieving notification statistics: {e}")
+        return jsonify({"message": "Error retrieving notification statistics", "error": str(e)}), 500
+
+
+@bp.route('/type/<notification_type>', methods=['GET'])
+@jwt_required()
+def get_notifications_by_type(notification_type):
+    """
+    Get notifications of specific type for current user
+    ---
+    get:
+      summary: Get notifications by type
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: notification_type
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [ticket_reminder, price_alert, chat_message, payment_confirmation, system]
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+            minimum: 1
+            maximum: 100
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            default: 0
+            minimum: 0
+      tags:
+        - Notifications
+      responses:
+        200:
+          description: Notifications retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  notifications:
+                    type: array
+                    items:
+                      type: object
+                  total_count:
+                    type: integer
+                  limit:
+                    type: integer
+                  offset:
+                    type: integer
+        400:
+          description: Invalid notification type
+    """
+    try:
+        current_user_id = get_current_user_id()
+
+        limit = min(int(request.args.get('limit', 20)), 100)
+        offset = max(int(request.args.get('offset', 0)), 0)
+
+        # Validate notification type
+        valid_types = ['ticket_reminder', 'price_alert', 'chat_message', 'payment_confirmation', 'system']
+        if notification_type not in valid_types:
+            return jsonify({
+                "message": f"Invalid notification type. Must be one of: {valid_types}"
+            }), 400
+
+        notifications = notification_service.get_notifications_by_type(
+            current_user_id, notification_type, limit, offset
+        )
+
+        notification_list = []
+        for notification in notifications:
+            notification_list.append({
+                "notification_id": notification.NotificationID,
+                "title": notification.Title,
+                "content": notification.Content,
+                "type": notification.Type,
+                "is_read": notification.IsRead,
+                "created_at": notification.CreatedAt.isoformat(),
+                "read_at": notification.ReadAt.isoformat() if notification.ReadAt else None
+            })
+
+        return jsonify({
+            "notifications": notification_list,
+            "total_count": len(notification_list),
+            "limit": limit,
+            "offset": offset,
+            "notification_type": notification_type,
+            "message": f"Notifications of type '{notification_type}' retrieved successfully"
+        }), 200
+
+    except ValueError as e:
+        return jsonify({"message": str(e)}), 404
+    except Exception as e:
+        logger.error(f"Error retrieving notifications by type: {e}")
+        return jsonify({"message": "Error retrieving notifications", "error": str(e)}), 500
+
+
+@bp.route('/bulk-create', methods=['POST'])
+@jwt_required()
+def bulk_create_notifications():
+    """
+    Create multiple notifications (Admin only)
+    ---
+    post:
+      summary: Create multiple notifications at once
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                notifications:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      user_id:
+                        type: integer
+                      title:
+                        type: string
+                      content:
+                        type: string
+                      type:
+                        type: string
+                        enum: [ticket_reminder, price_alert, chat_message, payment_confirmation, system]
+                    required:
+                      - user_id
+                      - title
+                      - content
+                      - type
+              required:
+                - notifications
+      tags:
+        - Notifications
+      responses:
+        201:
+          description: Notifications created successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  created_count:
+                    type: integer
+                  failed_count:
+                    type: integer
+                  message:
+                    type: string
+        400:
+          description: Invalid input data
+        403:
+          description: Admin access required
+    """
+    try:
+        # Check if user is admin (you might want to add admin_required decorator)
+        from utils.jwt_helpers import get_current_user_role
+        from api.decorators.auth_decorators import Roles
+
+        current_role = get_current_user_role()
+        if current_role != Roles.ADMIN:
+            return jsonify({"message": "Admin access required"}), 403
+
+        data = request.get_json()
+        if not data or 'notifications' not in data:
+            return jsonify({"message": "Notifications data is required"}), 400
+
+        notifications_data = data['notifications']
+        if not isinstance(notifications_data, list):
+            return jsonify({"message": "Notifications must be a list"}), 400
+
+        created_notifications = notification_service.bulk_create_notifications(notifications_data)
+
+        return jsonify({
+            "created_count": len(created_notifications),
+            "failed_count": len(notifications_data) - len(created_notifications),
+            "message": f"Successfully created {len(created_notifications)} notifications"
+        }), 201
+
+    except Exception as e:
+        logger.error(f"Error bulk creating notifications: {e}")
+        return jsonify({"message": "Error creating notifications", "error": str(e)}), 500

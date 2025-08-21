@@ -65,6 +65,11 @@ class UserRepository(IUserRepository):
         model = self.session.query(UserModel).filter_by(UserId=user_id).first()
         return self._to_domain(model) if model else None
 
+    def get_by_username(self, username: str) -> Optional[User]:
+        """Get user by username"""
+        model = self.session.query(UserModel).filter_by(UserName=username).first()
+        return self._to_domain(model) if model else None
+
     def list(self) -> List[User]:
         models = self.session.query(UserModel).all()
         return [self._to_domain(m) for m in models]
@@ -96,13 +101,103 @@ class UserRepository(IUserRepository):
             self.session.close()
 
     def delete(self, user_id: int) -> None:
+        import logging
+        logger = logging.getLogger(__name__)
+
         try:
             model = self.session.query(UserModel).filter_by(UserId=user_id).first()
-            if model:
-                self.session.delete(model)
-                self.session.commit()
-        except Exception:
+            if not model:
+                logger.warning(f"User {user_id} not found for deletion")
+                raise ValueError(f"User {user_id} not found")
+
+            logger.info(f"Starting HARD DELETE for user {user_id}: {model.Email}")
+
+            # Delete related data first to avoid foreign key constraints
+            self._delete_user_related_data(user_id)
+            logger.info(f"Deleted all related data for user {user_id}")
+
+            # Then delete the user - FORCE DELETE
+            self.session.delete(model)
+            self.session.commit()
+            logger.info(f"Successfully HARD DELETED user {user_id} from database")
+
+        except Exception as e:
+            logger.error(f"HARD DELETE FAILED for user {user_id}: {e}")
             self.session.rollback()
-            raise
+            raise Exception(f"Hard delete failed for user {user_id}: {e}")
         finally:
             self.session.close()
+
+    def _delete_user_related_data(self, user_id: int) -> None:
+        """
+        Delete all data related to a user to avoid foreign key constraint violations
+
+        Args:
+            user_id: ID of the user whose related data should be deleted
+        """
+        import logging
+        logger = logging.getLogger(__name__)
+
+        try:
+            # Import models here to avoid circular imports
+            from infrastructure.models.Ticket_model import TicketModel
+            from infrastructure.models.message_model import MessageModel
+            from infrastructure.models.transaction_model import TransactionModel
+            from infrastructure.models.notification_model import NotificationModel
+            from infrastructure.models.feedback_model import UserFeedbackModel, TicketFeedbackModel
+
+            # First, get all tickets owned by user to delete related messages
+            user_tickets = self.session.query(TicketModel).filter_by(OwnerID=user_id).all()
+            user_ticket_ids = [ticket.TicketID for ticket in user_tickets]
+
+            # Delete messages related to user's tickets
+            ticket_messages_deleted = 0
+            if user_ticket_ids:
+                ticket_messages_deleted = self.session.query(MessageModel).filter(
+                    MessageModel.TicketID.in_(user_ticket_ids)
+                ).delete(synchronize_session=False)
+
+            # Delete messages sent or received by user (not related to tickets)
+            user_messages_deleted = self.session.query(MessageModel).filter(
+                (MessageModel.SenderID == user_id) |
+                (MessageModel.ReceiverID == user_id)
+            ).delete()
+
+            total_messages_deleted = ticket_messages_deleted + user_messages_deleted
+            logger.info(f"Deleted {total_messages_deleted} messages for user {user_id} (ticket-related: {ticket_messages_deleted}, user-related: {user_messages_deleted})")
+
+            # Now delete tickets owned by user (after messages are deleted)
+            tickets_deleted = self.session.query(TicketModel).filter_by(OwnerID=user_id).delete()
+            logger.info(f"Deleted {tickets_deleted} tickets for user {user_id}")
+
+            # Delete transactions involving user
+            transactions_deleted = self.session.query(TransactionModel).filter(
+                (TransactionModel.BuyerID == user_id) |
+                (TransactionModel.SellerID == user_id)
+            ).delete()
+            logger.info(f"Deleted {transactions_deleted} transactions for user {user_id}")
+
+            # Delete notifications for user
+            notifications_deleted = self.session.query(NotificationModel).filter_by(UserID=user_id).delete()
+            logger.info(f"Deleted {notifications_deleted} notifications for user {user_id}")
+
+            # Delete user feedback given or received by user
+            user_feedback_deleted = self.session.query(UserFeedbackModel).filter(
+                (UserFeedbackModel.ReviewerID == user_id) |
+                (UserFeedbackModel.TargetUserID == user_id)
+            ).delete()
+
+            # Delete ticket feedback given by user
+            ticket_feedback_deleted = self.session.query(TicketFeedbackModel).filter_by(ReviewerID=user_id).delete()
+
+            total_feedback_deleted = user_feedback_deleted + ticket_feedback_deleted
+            logger.info(f"Deleted {total_feedback_deleted} feedback records for user {user_id} (user: {user_feedback_deleted}, ticket: {ticket_feedback_deleted})")
+
+            # Commit the related data deletion
+            self.session.commit()
+            logger.info(f"Successfully committed deletion of all related data for user {user_id}")
+
+        except Exception as e:
+            logger.error(f"Failed to delete related data for user {user_id}: {e}")
+            self.session.rollback()
+            raise Exception(f"Failed to delete user related data: {e}")

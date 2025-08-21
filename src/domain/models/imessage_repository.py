@@ -30,3 +30,11 @@ class IMessageRepository(ABC):
     @abstractmethod
     def delete(self, message_id: int) -> bool:
         pass
+
+    @abstractmethod
+    def search_messages(self, user_id: int, query: str, other_user_id: Optional[int] = None, limit: int = 20, offset: int = 0) -> List[Message]:
+        pass
+
+    @abstractmethod
+    def get_user_stats(self, user_id: int) -> dict:
+        pass

@@ -3,8 +3,24 @@ from flask_jwt_extended import jwt_required, get_jwt_identity
 from utils.jwt_helpers import get_current_user_id
 from marshmallow import Schema, fields, validate
 from datetime import datetime
+from services.feedback_service import FeedbackService
+from infrastructure.repositories.feedback_repository import FeedbackRepository
+from infrastructure.repositories.user_repository import UserRepository
+from infrastructure.repositories.ticket_repository import TicketRepository
+from infrastructure.repositories.transaction_repository import TransactionRepository
+from infrastructure.databases.mssql import session
+import logging
+
+logger = logging.getLogger(__name__)
 
 bp = Blueprint('feedback', __name__, url_prefix='/api/feedback')
+
+# Initialize services
+feedback_repository = FeedbackRepository(session)
+user_repository = UserRepository(session)
+ticket_repository = TicketRepository(session)
+transaction_repository = TransactionRepository(session)
+feedback_service = FeedbackService(feedback_repository, user_repository, ticket_repository, transaction_repository)
 
 # Schemas
 class FeedbackSchema(Schema):
@@ -105,21 +121,23 @@ def submit_user_feedback(target_user_id):
         rating = data['rating']
         comment = data.get('comment', '')
         transaction_id = data.get('transaction_id')
-        
-        # TODO: Implement feedback submission logic
-        # 1. Validate target user exists
-        # 2. Check if feedback already exists for this user/transaction
-        # 3. Create feedback record
-        # 4. Update user's average rating
-        # 5. Send notification to target user
-        
+
+        # Submit feedback using service
+        feedback = feedback_service.submit_user_feedback(
+            reviewer_id=current_user_id,
+            target_user_id=target_user_id,
+            rating=rating,
+            comment=comment,
+            transaction_id=transaction_id
+        )
+
         return jsonify({
-            "feedback_id": 1,
-            "target_user_id": target_user_id,
-            "rating": rating,
-            "comment": comment,
-            "transaction_id": transaction_id,
-            "submitted_at": datetime.now().isoformat(),
+            "feedback_id": feedback.FeedbackID,
+            "target_user_id": feedback.TargetUserID,
+            "rating": feedback.Rating,
+            "comment": feedback.Comment,
+            "transaction_id": feedback.TransactionID,
+            "submitted_at": feedback.CreatedAt.isoformat(),
             "message": "Feedback submitted successfully"
         }), 201
         
@@ -394,3 +412,175 @@ def get_ticket_feedback(ticket_id):
         
     except Exception as e:
         return jsonify({"message": "Error retrieving ticket feedback", "error": str(e)}), 500
+
+
+@bp.route('/user/<int:user_id>/summary', methods=['GET'])
+def get_user_feedback_summary(user_id):
+    """
+    Get comprehensive feedback summary for a user
+    ---
+    get:
+      summary: Get comprehensive feedback summary for a user
+      parameters:
+        - name: user_id
+          in: path
+          required: true
+          schema:
+            type: integer
+          description: ID of the user to get feedback summary for
+      tags:
+        - Feedback
+      responses:
+        200:
+          description: User feedback summary retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  user_id:
+                    type: integer
+                  average_rating:
+                    type: number
+                  total_feedback:
+                    type: integer
+                  rating_distribution:
+                    type: object
+                  recent_feedback:
+                    type: array
+                  feedback_trend:
+                    type: string
+        404:
+          description: User not found
+    """
+    try:
+        summary = feedback_service.get_user_feedback_summary(user_id)
+
+        return jsonify({
+            **summary,
+            "message": "User feedback summary retrieved successfully"
+        }), 200
+
+    except ValueError as e:
+        return jsonify({"message": str(e)}), 404
+    except Exception as e:
+        logger.error(f"Error retrieving user feedback summary: {e}")
+        return jsonify({"message": "Error retrieving user feedback summary", "error": str(e)}), 500
+
+
+@bp.route('/user/<int:user_id>/analytics', methods=['GET'])
+def get_user_feedback_analytics(user_id):
+    """
+    Get detailed feedback analytics for a user
+    ---
+    get:
+      summary: Get detailed feedback analytics for a user
+      parameters:
+        - name: user_id
+          in: path
+          required: true
+          schema:
+            type: integer
+          description: ID of the user to get analytics for
+      tags:
+        - Feedback
+      responses:
+        200:
+          description: User feedback analytics retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  user_id:
+                    type: integer
+                  buyer_analytics:
+                    type: object
+                  seller_analytics:
+                    type: object
+                  overall_reputation_score:
+                    type: number
+        404:
+          description: User not found
+    """
+    try:
+        analytics = feedback_service.get_feedback_analytics(user_id)
+
+        return jsonify({
+            **analytics,
+            "message": "User feedback analytics retrieved successfully"
+        }), 200
+
+    except ValueError as e:
+        return jsonify({"message": str(e)}), 404
+    except Exception as e:
+        logger.error(f"Error retrieving user feedback analytics: {e}")
+        return jsonify({"message": "Error retrieving user feedback analytics", "error": str(e)}), 500
+
+
+@bp.route('/my-feedback', methods=['GET'])
+@jwt_required()
+def get_my_feedback():
+    """
+    Get current user's feedback summary
+    ---
+    get:
+      summary: Get current user's feedback summary
+      security:
+        - BearerAuth: []
+      tags:
+        - Feedback
+      responses:
+        200:
+          description: Current user's feedback summary retrieved successfully
+        401:
+          description: Unauthorized
+    """
+    try:
+        current_user_id = get_current_user_id()
+        summary = feedback_service.get_user_feedback_summary(current_user_id)
+
+        return jsonify({
+            **summary,
+            "message": "Your feedback summary retrieved successfully"
+        }), 200
+
+    except ValueError as e:
+        return jsonify({"message": str(e)}), 404
+    except Exception as e:
+        logger.error(f"Error retrieving user's own feedback summary: {e}")
+        return jsonify({"message": "Error retrieving your feedback summary", "error": str(e)}), 500
+
+
+@bp.route('/my-analytics', methods=['GET'])
+@jwt_required()
+def get_my_feedback_analytics():
+    """
+    Get current user's detailed feedback analytics
+    ---
+    get:
+      summary: Get current user's detailed feedback analytics
+      security:
+        - BearerAuth: []
+      tags:
+        - Feedback
+      responses:
+        200:
+          description: Current user's feedback analytics retrieved successfully
+        401:
+          description: Unauthorized
+    """
+    try:
+        current_user_id = get_current_user_id()
+        analytics = feedback_service.get_feedback_analytics(current_user_id)
+
+        return jsonify({
+            **analytics,
+            "message": "Your feedback analytics retrieved successfully"
+        }), 200
+
+    except ValueError as e:
+        return jsonify({"message": str(e)}), 404
+    except Exception as e:
+        logger.error(f"Error retrieving user's own feedback analytics: {e}")
+        return jsonify({"message": "Error retrieving your feedback analytics", "error": str(e)}), 500

@@ -77,7 +77,36 @@ class FeedbackRepository(IFeedbackRepository):
             self.session.commit()
             return True
         return False
-    
+
+    def get_feedback_by_transaction(self, transaction_id: int, reviewer_id: int) -> Optional[Feedback]:
+        model = self.session.query(UserFeedbackModel).filter(
+            UserFeedbackModel.TransactionID == transaction_id,
+            UserFeedbackModel.ReviewerID == reviewer_id
+        ).first()
+        return self._to_domain_user_feedback(model) if model else None
+
+    def get_feedback_as_buyer(self, user_id: int) -> List[Feedback]:
+        # Get feedback where user was the buyer (feedback given to sellers)
+        from infrastructure.models.transaction_model import TransactionModel
+        models = self.session.query(UserFeedbackModel).join(
+            TransactionModel, UserFeedbackModel.TransactionID == TransactionModel.TransactionID
+        ).filter(
+            TransactionModel.BuyerID == user_id,
+            UserFeedbackModel.ReviewerID == user_id
+        ).all()
+        return [self._to_domain_user_feedback(model) for model in models]
+
+    def get_feedback_as_seller(self, user_id: int) -> List[Feedback]:
+        # Get feedback where user was the seller (feedback given to buyers)
+        from infrastructure.models.transaction_model import TransactionModel
+        models = self.session.query(UserFeedbackModel).join(
+            TransactionModel, UserFeedbackModel.TransactionID == TransactionModel.TransactionID
+        ).filter(
+            TransactionModel.SellerID == user_id,
+            UserFeedbackModel.ReviewerID == user_id
+        ).all()
+        return [self._to_domain_user_feedback(model) for model in models]
+
     def _to_domain_user_feedback(self, model: UserFeedbackModel) -> Feedback:
         return Feedback(
             FeedbackID=model.FeedbackID,

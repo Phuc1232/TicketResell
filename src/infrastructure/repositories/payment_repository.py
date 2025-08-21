@@ -65,6 +65,18 @@ class PaymentRepository(IPaymentRepository):
     def get_by_status(self, status: str) -> List[Payment]:
         models = self.session.query(PaymentModel).filter(PaymentModel.Status == status).all()
         return [self._to_domain(model) for model in models]
+
+    def get_user_payments_paginated(self, user_id: int, limit: int, offset: int) -> List[Payment]:
+        models = (self.session.query(PaymentModel)
+                 .filter(PaymentModel.UserID == user_id)
+                 .order_by(PaymentModel.PaymentID.desc())
+                 .limit(limit)
+                 .offset(offset)
+                 .all())
+        return [self._to_domain(model) for model in models]
+
+    def get_user_payments_count(self, user_id: int) -> int:
+        return self.session.query(PaymentModel).filter(PaymentModel.UserID == user_id).count()
     
     def _to_domain(self, model: PaymentModel) -> Payment:
         return Payment(

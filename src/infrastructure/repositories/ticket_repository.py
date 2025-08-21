@@ -57,6 +57,20 @@ class TicketRepository(ITicketRepository):
         )
         return self._to_domain(model) if model else None
 
+    def get_by_event_name_and_owner(self, event_name: str, owner_username: str) -> Optional[Ticket]:
+        """Get ticket by event name and owner username"""
+        from infrastructure.models.user_model import UserModel
+
+        # Join với user table để lấy ticket theo event_name và owner username
+        result = self.session.query(TicketModel).join(
+            UserModel, TicketModel.OwnerID == UserModel.UserId
+        ).filter(
+            TicketModel.EventName == event_name,
+            UserModel.UserName == owner_username
+        ).first()
+
+        return self._to_domain(result) if result else None
+
     def list(self) -> List[Ticket]:
         models = self.session.query(TicketModel).all()
         return [self._to_domain(m) for m in models]
@@ -89,20 +103,99 @@ class TicketRepository(ITicketRepository):
             self.session.close()
 
     def delete(self, ticket_id: int) -> None:
+        """Hard delete ticket and all related data"""
+        import logging
+        logger = logging.getLogger(__name__)
+
         try:
             model = (
                 self.session.query(TicketModel)
                 .filter_by(TicketID=ticket_id)
                 .first()
             )
-            if model:
-                self.session.delete(model)
-                self.session.commit()
+            if not model:
+                logger.warning(f"Ticket {ticket_id} not found for deletion")
+                raise ValueError(f"Ticket {ticket_id} not found")
+
+            logger.info(f"Starting HARD DELETE for ticket {ticket_id}: {model.EventName}")
+
+            # Delete related data first to avoid foreign key constraints
+            self._delete_ticket_related_data(ticket_id)
+            logger.info(f"Deleted all related data for ticket {ticket_id}")
+
+            # Then delete the ticket - FORCE DELETE
+            self.session.delete(model)
+            self.session.commit()
+            logger.info(f"Successfully HARD DELETED ticket {ticket_id} from database")
+
         except Exception:
             self.session.rollback()
             raise
         finally:
             self.session.close()
+
+    def _delete_ticket_related_data(self, ticket_id: int):
+        """Delete all data related to a ticket"""
+        import logging
+        logger = logging.getLogger(__name__)
+
+        try:
+            # Import models here to avoid circular imports
+            from infrastructure.models.transaction_model import TransactionModel
+            from infrastructure.models.feedback_model import UserFeedbackModel, TicketFeedbackModel
+            from infrastructure.models.payment_model import PaymentModel
+            from infrastructure.models.earning_model import EarningModel
+            from infrastructure.models.notification_model import NotificationModel
+            import datetime
+
+            # 1. Delete transactions related to this ticket
+            transactions = self.session.query(TransactionModel).filter_by(TicketID=ticket_id).all()
+            for transaction in transactions:
+                logger.info(f"Deleting transaction {transaction.TransactionID} for ticket {ticket_id}")
+
+                # Delete payments related to this transaction
+                payments = self.session.query(PaymentModel).filter_by(TransactionID=transaction.TransactionID).all()
+                for payment in payments:
+                    logger.info(f"Deleting payment {payment.PaymentID}")
+                    self.session.delete(payment)
+
+                # Note: Earnings are not directly linked to transactions via foreign key
+                # They are linked by UserID only, so we skip deleting earnings
+                # to avoid accidentally deleting unrelated earnings
+                logger.info(f"Skipping earnings deletion for transaction {transaction.TransactionID} - no direct FK relationship")
+
+                # Delete feedbacks related to this transaction
+                user_feedbacks = self.session.query(UserFeedbackModel).filter_by(TransactionID=transaction.TransactionID).all()
+                for feedback in user_feedbacks:
+                    logger.info(f"Deleting user feedback {feedback.FeedbackID}")
+                    self.session.delete(feedback)
+
+                # Delete the transaction itself
+                self.session.delete(transaction)
+
+            # 2. Delete ticket feedbacks (if any)
+            ticket_feedbacks = self.session.query(TicketFeedbackModel).filter_by(TicketID=ticket_id).all()
+            for feedback in ticket_feedbacks:
+                logger.info(f"Deleting ticket feedback {feedback.FeedbackID}")
+                self.session.delete(feedback)
+
+            # 3. Delete notifications related to this ticket (if any)
+            # This might need adjustment based on your notification structure
+            notifications = self.session.query(NotificationModel).filter(
+                NotificationModel.Content.like(f'%ticket {ticket_id}%')
+            ).all()
+            for notification in notifications:
+                logger.info(f"Deleting notification {notification.NotificationID}")
+                self.session.delete(notification)
+
+            # Commit all deletions
+            self.session.commit()
+            logger.info(f"Successfully deleted all related data for ticket {ticket_id}")
+
+        except Exception as e:
+            logger.error(f"Error deleting related data for ticket {ticket_id}: {str(e)}")
+            self.session.rollback()
+            raise
 
     def get_tickets_by_owner(self, owner_id: int) -> List[Ticket]:
         """Get tickets by owner ID"""

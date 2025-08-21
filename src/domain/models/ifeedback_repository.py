@@ -34,3 +34,15 @@ class IFeedbackRepository(ABC):
     @abstractmethod
     def delete_ticket_feedback(self, feedback_id: int) -> bool:
         pass
+
+    @abstractmethod
+    def get_feedback_by_transaction(self, transaction_id: int, reviewer_id: int) -> Optional[Feedback]:
+        pass
+
+    @abstractmethod
+    def get_feedback_as_buyer(self, user_id: int) -> List[Feedback]:
+        pass
+
+    @abstractmethod
+    def get_feedback_as_seller(self, user_id: int) -> List[Feedback]:
+        pass

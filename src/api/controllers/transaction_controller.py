@@ -4,14 +4,48 @@ from utils.jwt_helpers import get_current_user_id
 from marshmallow import Schema, fields, validate
 import uuid
 from datetime import datetime
+import logging
+
+# Import services
+from services.transaction_service import TransactionService
+from services.payment_service import PaymentService
+from services.notification_service import NotificationService
+from services.earning_service import EarningService
+from services.ticket_service import TicketService
+from infrastructure.repositories.transaction_repository import TransactionRepository
+from infrastructure.repositories.payment_repository import PaymentRepository
+from infrastructure.repositories.notification_repository import NotificationRepository
+from infrastructure.repositories.earning_repository import EarningRepository
+from infrastructure.repositories.ticket_repository import TicketRepository
+from infrastructure.repositories.user_repository import UserRepository
+from infrastructure.databases.mssql import session
+
+logger = logging.getLogger(__name__)
 
 bp = Blueprint('transactions', __name__, url_prefix='/api/transactions')
 
+# Initialize services
+transaction_repository = TransactionRepository(session)
+payment_repository = PaymentRepository(session)
+notification_repository = NotificationRepository(session)
+earning_repository = EarningRepository(session)
+ticket_repository = TicketRepository(session)
+user_repository = UserRepository(session)
+
+transaction_service = TransactionService(transaction_repository, ticket_repository, user_repository)
+payment_service = PaymentService(payment_repository, user_repository, transaction_repository)
+notification_service = NotificationService(notification_repository, user_repository)
+earning_service = EarningService(earning_repository, user_repository)
+ticket_service = TicketService(ticket_repository)
+
 # Schemas
 class TransactionInitiateSchema(Schema):
-    ticket_id = fields.Int(required=True, validate=validate.Range(min=1),
-                          error_messages={"required": "Ticket ID is required",
-                                         "validator_failed": "Ticket ID must be a positive integer"})
+    event_name = fields.Str(required=True, validate=validate.Length(min=1, max=100),
+                           error_messages={"required": "Event name is required",
+                                          "validator_failed": "Event name must be between 1 and 100 characters"})
+    owner_username = fields.Str(required=True, validate=validate.Length(min=3, max=50),
+                               error_messages={"required": "Owner username is required",
+                                              "validator_failed": "Owner username must be between 3 and 50 characters"})
     payment_method = fields.Str(required=True, validate=validate.OneOf(['Cash', 'Bank Transfer', 'Digital Wallet', 'Credit Card']),
                                error_messages={"required": "Payment method is required",
                                               "validator_failed": "Payment method must be one of: Cash, Bank Transfer, Digital Wallet, Credit Card"})
@@ -25,8 +59,21 @@ class TransactionCallbackSchema(Schema):
     payment_transaction_id = fields.Str()
     error_message = fields.Str()
 
+class BuyTicketSchema(Schema):
+    event_name = fields.Str(required=True, validate=validate.Length(min=1, max=100),
+                           error_messages={"required": "Event name is required",
+                                          "validator_failed": "Event name must be between 1 and 100 characters"})
+    owner_username = fields.Str(required=True, validate=validate.Length(min=3, max=50),
+                               error_messages={"required": "Owner username is required",
+                                              "validator_failed": "Owner username must be between 3 and 50 characters"})
+    payment_method = fields.Str(required=True, validate=validate.OneOf(['Cash', 'Bank Transfer', 'Digital Wallet', 'Credit Card']),
+                               error_messages={"required": "Payment method is required",
+                                              "validator_failed": "Payment method must be one of: Cash, Bank Transfer, Digital Wallet, Credit Card"})
+    payment_data = fields.Dict(required=False, load_default={})
+
 transaction_initiate_schema = TransactionInitiateSchema()
 transaction_callback_schema = TransactionCallbackSchema()
+buy_ticket_schema = BuyTicketSchema()
 
 @bp.route('/initiate', methods=['POST'])
 @jwt_required()
@@ -45,9 +92,12 @@ def initiate_transaction():
             schema:
               type: object
               properties:
-                ticket_id:
-                  type: integer
-                  description: ID of the ticket to purchase
+                event_name:
+                  type: string
+                  description: Name of the event
+                owner_username:
+                  type: string
+                  description: Username of the ticket owner
                 payment_method:
                   type: string
                   enum: [Cash, Bank Transfer, Digital Wallet, Credit Card]
@@ -56,7 +106,8 @@ def initiate_transaction():
                   type: number
                   description: Transaction amount
               required:
-                - ticket_id
+                - event_name
+                - owner_username
                 - payment_method
                 - amount
       tags:
@@ -92,22 +143,48 @@ def initiate_transaction():
             return jsonify({"message": "Validation errors", "errors": errors}), 400
         
         current_user_id = get_current_user_id()
-        ticket_id = data['ticket_id']
+        event_name = data['event_name']
+        owner_username = data['owner_username']
         payment_method = data['payment_method']
         amount = data['amount']
-        
-        # TODO: Implement transaction service logic
-        # 1. Validate ticket exists and is available
-        # 2. Check if user has sufficient balance
-        # 3. Create transaction record
-        # 4. Redirect to payment gateway
-        
-        transaction_id = str(uuid.uuid4())
-        
+
+        # Get ticket by event name and owner username
+        ticket = ticket_service.get_ticket_by_event_and_owner(event_name, owner_username)
+        if not ticket:
+            return jsonify({"message": "Ticket not found"}), 404
+
+        # Initiate transaction using service
+        transaction = transaction_service.initiate_transaction(
+            ticket_id=ticket.TicketID,
+            buyer_id=current_user_id,
+            amount=amount,
+            payment_method=payment_method
+        )
+
+        # Create payment record
+        payment = payment_service.create_payment(
+            methods=payment_method,
+            amount=amount,
+            user_id=current_user_id,
+            title=f"Ticket Purchase - Transaction {transaction.TransactionID}",
+            transaction_id=transaction.TransactionID
+        )
+
+        # Send notification to buyer
+        notification_service.create_transaction_notification(
+            user_id=current_user_id,
+            transaction_type="purchase_initiated",
+            event_name="Ticket Purchase",
+            amount=amount
+        )
+
+        logger.info(f"Transaction {transaction.TransactionID} initiated by user {current_user_id}")
+
         return jsonify({
-            "transaction_id": transaction_id,
-            "status": "pending",
-            "redirect_url": f"/transaction/gateway/{transaction_id}",
+            "transaction_id": transaction.TransactionID,
+            "payment_id": payment.PaymentID,
+            "status": transaction.Status,
+            "redirect_url": f"/api/payments/{payment.PaymentID}/process",
             "message": "Transaction initiated successfully"
         }), 200
         
@@ -158,21 +235,272 @@ def transaction_callback():
         status = data['status']
         payment_transaction_id = data.get('payment_transaction_id')
         error_message = data.get('error_message')
-        
-        # TODO: Implement transaction callback logic
-        # 1. Update transaction record
-        # 2. If successful, transfer ticket ownership
-        # 3. Send notifications
-        # 4. Update transaction status
-        
+
+        # Process transaction callback using service
+        transaction = transaction_service.process_transaction_callback(
+            transaction_id=transaction_id,
+            status=status,
+            payment_transaction_id=payment_transaction_id
+        )
+
+        if status == "success":
+            # Get ticket and user information
+            ticket = ticket_service.get_ticket(transaction.TicketID)
+            buyer = user_repository.get_by_id(transaction.BuyerID)
+            seller = user_repository.get_by_id(transaction.SellerID)
+
+            if ticket and buyer and seller:
+                # Process seller earnings
+                earning = earning_service.process_transaction_earnings(
+                    seller_id=transaction.SellerID,
+                    transaction_amount=transaction.Amount,
+                    transaction_id=transaction.TransactionID
+                )
+
+                # Send success notifications
+                notification_service.create_transaction_notification(
+                    user_id=transaction.BuyerID,
+                    transaction_type="purchase_success",
+                    event_name=ticket.EventName,
+                    amount=transaction.Amount
+                )
+
+                notification_service.create_transaction_notification(
+                    user_id=transaction.SellerID,
+                    transaction_type="sale_success",
+                    event_name=ticket.EventName,
+                    amount=transaction.Amount
+                )
+
+                logger.info(f"Transaction {transaction_id} completed successfully. Seller earned ${earning.TotalAmount:.2f}")
+
+        elif status == "failed":
+            # Send failure notifications
+            buyer = user_repository.get_by_id(transaction.BuyerID)
+            if buyer:
+                notification_service.create_transaction_notification(
+                    user_id=transaction.BuyerID,
+                    transaction_type="purchase_failed",
+                    event_name="Ticket Purchase",
+                    amount=transaction.Amount
+                )
+
+            logger.warning(f"Transaction {transaction_id} failed: {error_message}")
+
         return jsonify({
             "message": "Transaction callback processed successfully",
             "transaction_id": transaction_id,
-            "status": status
+            "status": status,
+            "processed_at": datetime.now().isoformat()
         }), 200
         
     except Exception as e:
+        logger.error(f"Error processing transaction callback: {e}")
         return jsonify({"message": "Error processing transaction callback", "error": str(e)}), 500
+
+
+@bp.route('/buy-ticket', methods=['POST'])
+@jwt_required()
+def buy_ticket():
+    """
+    Complete ticket purchase workflow
+    ---
+    post:
+      summary: Complete ticket purchase workflow
+      description: Orchestrates the entire ticket purchase process including payment, ownership transfer, notifications, and earnings
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                event_name:
+                  type: string
+                  description: Name of the event
+                owner_username:
+                  type: string
+                  description: Username of the ticket owner
+                payment_method:
+                  type: string
+                  enum: [Cash, Bank Transfer, Digital Wallet, Credit Card]
+                  description: Payment method to use
+                payment_data:
+                  type: object
+                  description: Additional payment method specific data
+              required:
+                - event_name
+                - owner_username
+                - payment_method
+      tags:
+        - Transactions
+      responses:
+        200:
+          description: Ticket purchased successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  transaction_id:
+                    type: integer
+                  payment_id:
+                    type: integer
+                  ticket_id:
+                    type: integer
+                  status:
+                    type: string
+                  total_amount:
+                    type: number
+                  seller_earnings:
+                    type: number
+                  commission_amount:
+                    type: number
+                  message:
+                    type: string
+        400:
+          description: Invalid input data or ticket not available
+        404:
+          description: Ticket not found
+        409:
+          description: Ticket already sold
+    """
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({"message": "No data provided"}), 400
+
+        # Validate request data
+        errors = buy_ticket_schema.validate(data)
+        if errors:
+            return jsonify({"message": "Validation errors", "errors": errors}), 400
+
+        current_user_id = get_current_user_id()
+        event_name = data['event_name']
+        owner_username = data['owner_username']
+        payment_method = data['payment_method']
+        payment_data = data.get('payment_data', {})
+
+        # Get ticket information by event name and owner username
+        ticket = ticket_service.get_ticket_by_event_and_owner(event_name, owner_username)
+        if not ticket:
+            return jsonify({"message": "Ticket not found"}), 404
+
+        if ticket.Status != "Available":
+            return jsonify({"message": "Ticket is not available for purchase"}), 409
+
+        # Prevent self-purchase
+        if ticket.OwnerID == current_user_id:
+            return jsonify({"message": "Cannot purchase your own ticket"}), 400
+
+        # Calculate earnings breakdown
+        earnings_breakdown = earning_service.calculate_seller_earnings(
+            user_id=ticket.OwnerID,
+            transaction_amount=ticket.Price
+        )
+
+        # Step 1: Initiate transaction
+        transaction = transaction_service.initiate_transaction(
+            ticket_id=ticket.TicketID,
+            buyer_id=current_user_id,
+            amount=ticket.Price,
+            payment_method=payment_method
+        )
+
+        # Step 2: Create payment record
+        payment = payment_service.create_payment(
+            methods=payment_method,
+            amount=ticket.Price,
+            user_id=current_user_id,
+            title=f"Ticket Purchase - {ticket.EventName}",
+            transaction_id=transaction.TransactionID
+        )
+
+        # Step 3: Process payment
+        payment_result = payment_service.process_payment(payment.PaymentID, payment_data)
+
+        if payment_result['status'] == 'success':
+            # Step 4: Complete transaction
+            completed_transaction = transaction_service.process_transaction_callback(
+                transaction_id=transaction.TransactionID,
+                status="success",
+                payment_transaction_id=payment_result.get('transaction_reference')
+            )
+
+            # Step 5: Process seller earnings
+            earning = earning_service.process_transaction_earnings(
+                seller_id=ticket.OwnerID,
+                transaction_amount=ticket.Price,
+                transaction_id=transaction.TransactionID
+            )
+
+            # Step 6: Send notifications
+            buyer = user_repository.get_by_id(current_user_id)
+            seller = user_repository.get_by_id(ticket.OwnerID)
+
+            if buyer and seller:
+                # Notify buyer
+                notification_service.create_transaction_notification(
+                    user_id=current_user_id,
+                    transaction_type="purchase_success",
+                    event_name=ticket.EventName,
+                    amount=ticket.Price
+                )
+
+                # Notify seller
+                notification_service.create_transaction_notification(
+                    user_id=ticket.OwnerID,
+                    transaction_type="sale_success",
+                    event_name=ticket.EventName,
+                    amount=ticket.Price
+                )
+
+            logger.info(f"Ticket {ticket.TicketID} ({event_name} by {owner_username}) purchased successfully by user {current_user_id}")
+
+            return jsonify({
+                "transaction_id": transaction.TransactionID,
+                "payment_id": payment.PaymentID,
+                "event_name": event_name,
+                "owner_username": owner_username,
+                "status": "success",
+                "total_amount": ticket.Price,
+                "seller_earnings": earnings_breakdown['seller_earnings'],
+                "commission_amount": earnings_breakdown['commission_amount'],
+                "payment_reference": payment_result.get('transaction_reference'),
+                "message": f"Successfully purchased ticket for {ticket.EventName}"
+            }), 200
+
+        else:
+            # Payment failed
+            transaction_service.process_transaction_callback(
+                transaction_id=transaction.TransactionID,
+                status="failed",
+                payment_transaction_id=payment_result.get('transaction_reference')
+            )
+
+            # Notify buyer of failure
+            notification_service.create_transaction_notification(
+                user_id=current_user_id,
+                transaction_type="purchase_failed",
+                event_name=ticket.EventName,
+                amount=ticket.Price
+            )
+
+            return jsonify({
+                "transaction_id": transaction.TransactionID,
+                "payment_id": payment.PaymentID,
+                "status": "failed",
+                "message": f"Payment failed: {payment_result['message']}"
+            }), 400
+
+    except ValueError as e:
+        logger.error(f"Validation error in buy_ticket: {e}")
+        return jsonify({"message": str(e)}), 400
+    except Exception as e:
+        logger.error(f"Error in buy_ticket: {e}")
+        return jsonify({"message": "Error processing ticket purchase", "error": str(e)}), 500
 
 @bp.route('/status/<transaction_id>', methods=['GET'])
 @jwt_required()

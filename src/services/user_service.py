@@ -18,6 +18,10 @@ class UserService:
     def get_user(self, user_id: int) -> Optional[User]:
         return self.repository.get_by_id(user_id)
 
+    def get_user_by_username(self, username: str) -> Optional[User]:
+        """Get user by username"""
+        return self.repository.get_by_username(username)
+
     def update_user(self, user_id: int, phone_number: str, username: str, status: str,
                     date_of_birth, role_id: int) -> User:
         user = User(id=user_id, phone_number=phone_number, username=username, status=status,

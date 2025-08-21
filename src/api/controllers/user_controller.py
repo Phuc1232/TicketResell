@@ -140,6 +140,37 @@ def me():
     user = user_service.get_user(user_id)
     return jsonify(response_schema.dump(user)), 200
 
+@bp.route('/<username>', methods=['GET'])
+def get_user_by_username(username):
+    """
+    Get user by username
+    ---
+    get:
+      summary: Get user by username
+      parameters:
+        - name: username
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Username of the user to get
+      tags:
+        - Users
+      responses:
+        200:
+          description: User info
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
+        404:
+          description: User not found
+    """
+    user = user_service.get_user_by_username(username)
+    if not user:
+        return jsonify({"message": "User not found"}), 404
+    return jsonify(response_schema.dump(user)), 200
+
 @bp.route('/me', methods=['PUT'])
 @jwt_required()
 def update_profile():
@@ -269,24 +300,24 @@ def rate_user(target_user_id):
     except Exception as e:
         return jsonify({"message": "Error rating user", "error": str(e)}), 500
 
-@bp.route('/<int:user_id>', methods=['DELETE'])
+@bp.route('/<username>', methods=['DELETE'])
 @jwt_required()
 @delete_permission_required
-def delete_user(user_id):
+def delete_user(username):
     """
-    Delete a user by ID (Admin only)
+    Delete a user by username (Admin only)
     ---
     delete:
-      summary: Delete a user by ID (Admin only)
+      summary: Delete a user by username (Admin only)
       security:
         - BearerAuth: []
       parameters:
-        - name: user_id
+        - name: username
           in: path
           required: true
           schema:
-            type: integer
-          description: ID of the user to delete
+            type: string
+          description: Username of the user to delete
       tags:
         - Users
       responses:
@@ -312,7 +343,12 @@ def delete_user(user_id):
                     type: string
     """
     try:
-        user_service.delete_user(user_id)
+        # Get user by username first
+        user = user_service.get_user_by_username(username)
+        if not user:
+            return jsonify({"message": "User not found"}), 404
+
+        user_service.delete_user(user.id)
         return '', 204
     except ValueError as e:
         return jsonify({"message": str(e)}), 404

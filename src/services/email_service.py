@@ -89,7 +89,7 @@ class EmailService:
                     
                     <p>Enter this code in the verification page to activate your account.</p>
                     
-                    <p class="warning">⚠️ This code will expire in 5 minutes for security reasons.</p>
+                    <p class="warning">WARNING: This code will expire in 5 minutes for security reasons.</p>
                     
                     <p>If you didn't create an account with TicketResell, please ignore this email.</p>
                     
@@ -233,7 +233,15 @@ class EmailService:
                 logger.info(f"[EMAIL DEBUG] HTML Body: {len(html_body)} characters")
             logger.info("[EMAIL DEBUG] Email sending simulated successfully")
             return True
-        
+
+        # Log email configuration for debugging
+        logger.info(f"[EMAIL] Attempting to send email to: {to_email}")
+        logger.info(f"[EMAIL] SMTP Server: {self.smtp_server}:{self.smtp_port}")
+        logger.info(f"[EMAIL] SMTP Username: {self.smtp_username}")
+        logger.info(f"[EMAIL] From Email: {self.from_email}")
+        logger.info(f"[EMAIL] Debug Mode: {self.debug_mode}")
+        logger.info(f"[EMAIL] SMTP Configured: {self.smtp_configured}")
+
         try:
             # Create message
             msg = MIMEMultipart('alternative')
@@ -251,16 +259,31 @@ class EmailService:
                 msg.attach(html_part)
             
             # Send email
+            logger.info(f"[EMAIL] Connecting to SMTP server...")
             with smtplib.SMTP(self.smtp_server, self.smtp_port) as server:
+                logger.info(f"[EMAIL] Starting TLS...")
                 server.starttls()
+                logger.info(f"[EMAIL] Logging in with username: {self.smtp_username}")
                 server.login(self.smtp_username, self.smtp_password)
+                logger.info(f"[EMAIL] Sending message...")
                 server.send_message(msg)
-            
-            logger.info(f"Email sent successfully to {to_email}")
+
+            logger.info(f"[EMAIL] Email sent successfully to {to_email}")
             return True
-            
+
+        except smtplib.SMTPAuthenticationError as e:
+            logger.error(f"[EMAIL] SMTP Authentication failed: {str(e)}")
+            logger.error(f"[EMAIL] Check username/password for: {self.smtp_username}")
+            return False
+        except smtplib.SMTPRecipientsRefused as e:
+            logger.error(f"[EMAIL] Recipients refused: {str(e)}")
+            return False
+        except smtplib.SMTPServerDisconnected as e:
+            logger.error(f"[EMAIL] SMTP server disconnected: {str(e)}")
+            return False
         except Exception as e:
-            logger.error(f"Failed to send email to {to_email}: {str(e)}")
+            logger.error(f"[EMAIL] Failed to send email to {to_email}: {str(e)}")
+            logger.error(f"[EMAIL] Error type: {type(e).__name__}")
             return False
     
     def get_config_status(self) -> dict:
