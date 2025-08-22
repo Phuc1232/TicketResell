@@ -189,10 +189,10 @@ def search_users():
 @delete_permission_required
 def force_delete_user(user_id):
     """
-    Force delete a user (Admin only)
+    Force delete a user by ID (Admin only)
     ---
     delete:
-      summary: Force delete any user (Admin only)
+      summary: Force delete any user by ID (Admin only)
       security:
         - BearerAuth: []
       parameters:
@@ -227,7 +227,7 @@ def force_delete_user(user_id):
         admin_user_id = get_current_user_id()
         data = request.get_json() or {}
         reason = data.get('reason')
-        
+
         admin_service.force_delete_user(admin_user_id, user_id, reason)
         return '', 204
     except ValueError as e:

@@ -220,26 +220,20 @@ def create_ticket():
     except Exception as e:
         return jsonify({"message": "Error creating ticket", "error": str(e)}), 500
 
-@bp.route('/<event_name>/<owner_username>', methods=['GET'])
-def get_ticket_by_event_and_owner(event_name, owner_username):
+@bp.route('/<int:ticket_id>', methods=['GET'])
+def get_ticket_by_id(ticket_id):
     """
-    Get ticket by event name and owner username
+    Get ticket by ID
     ---
     get:
-      summary: Get ticket by event name and owner username
+      summary: Get ticket by ID
       parameters:
-        - name: event_name
+        - name: ticket_id
           in: path
           required: true
           schema:
-            type: string
-          description: Name of the event
-        - name: owner_username
-          in: path
-          required: true
-          schema:
-            type: string
-          description: Username of the ticket owner
+            type: integer
+          description: ID of the ticket to get
       tags:
         - Tickets
       responses:
@@ -253,7 +247,7 @@ def get_ticket_by_event_and_owner(event_name, owner_username):
           description: Ticket not found
     """
     try:
-        ticket = ticket_service.get_ticket_by_event_and_owner(event_name, owner_username)
+        ticket = ticket_service.get_ticket(ticket_id)
         if not ticket:
             return jsonify({"message": "Ticket not found"}), 404
 
@@ -261,29 +255,23 @@ def get_ticket_by_event_and_owner(event_name, owner_username):
     except Exception as e:
         return jsonify({"message": "Error retrieving ticket", "error": str(e)}), 500
 
-@bp.route('/<event_name>/<owner_username>', methods=['PUT'])
+@bp.route('/<int:ticket_id>', methods=['PUT'])
 @jwt_required()
-def update_ticket(event_name, owner_username):
+def update_ticket(ticket_id):
     """
-    Update a ticket by event name and owner username (owner only)
+    Update a ticket by ID (owner only)
     ---
     put:
-      summary: Update a ticket by event name and owner username
+      summary: Update a ticket by ID
       security:
         - BearerAuth: []
       parameters:
-        - name: event_name
+        - name: ticket_id
           in: path
           required: true
           schema:
-            type: string
-          description: Name of the event
-        - name: owner_username
-          in: path
-          required: true
-          schema:
-            type: string
-          description: Username of the ticket owner
+            type: integer
+          description: ID of the ticket to update
       requestBody:
         required: true
         content:

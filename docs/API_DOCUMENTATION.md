@@ -6,7 +6,7 @@ This document provides comprehensive documentation for the Ticket Resell Platfor
 
 ## Base URL
 ```
-http://localhost:5000/api
+http://localhost:6868/api
 ```
 
 ## Authentication

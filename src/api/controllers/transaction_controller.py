@@ -40,12 +40,9 @@ ticket_service = TicketService(ticket_repository)
 
 # Schemas
 class TransactionInitiateSchema(Schema):
-    event_name = fields.Str(required=True, validate=validate.Length(min=1, max=100),
-                           error_messages={"required": "Event name is required",
-                                          "validator_failed": "Event name must be between 1 and 100 characters"})
-    owner_username = fields.Str(required=True, validate=validate.Length(min=3, max=50),
-                               error_messages={"required": "Owner username is required",
-                                              "validator_failed": "Owner username must be between 3 and 50 characters"})
+    ticket_id = fields.Int(required=True, validate=validate.Range(min=1),
+                          error_messages={"required": "Ticket ID is required",
+                                         "validator_failed": "Ticket ID must be a positive integer"})
     payment_method = fields.Str(required=True, validate=validate.OneOf(['Cash', 'Bank Transfer', 'Digital Wallet', 'Credit Card']),
                                error_messages={"required": "Payment method is required",
                                               "validator_failed": "Payment method must be one of: Cash, Bank Transfer, Digital Wallet, Credit Card"})
@@ -60,12 +57,9 @@ class TransactionCallbackSchema(Schema):
     error_message = fields.Str()
 
 class BuyTicketSchema(Schema):
-    event_name = fields.Str(required=True, validate=validate.Length(min=1, max=100),
-                           error_messages={"required": "Event name is required",
-                                          "validator_failed": "Event name must be between 1 and 100 characters"})
-    owner_username = fields.Str(required=True, validate=validate.Length(min=3, max=50),
-                               error_messages={"required": "Owner username is required",
-                                              "validator_failed": "Owner username must be between 3 and 50 characters"})
+    ticket_id = fields.Int(required=True, validate=validate.Range(min=1),
+                          error_messages={"required": "Ticket ID is required",
+                                         "validator_failed": "Ticket ID must be a positive integer"})
     payment_method = fields.Str(required=True, validate=validate.OneOf(['Cash', 'Bank Transfer', 'Digital Wallet', 'Credit Card']),
                                error_messages={"required": "Payment method is required",
                                               "validator_failed": "Payment method must be one of: Cash, Bank Transfer, Digital Wallet, Credit Card"})
@@ -92,12 +86,9 @@ def initiate_transaction():
             schema:
               type: object
               properties:
-                event_name:
-                  type: string
-                  description: Name of the event
-                owner_username:
-                  type: string
-                  description: Username of the ticket owner
+                ticket_id:
+                  type: integer
+                  description: ID of the ticket to purchase
                 payment_method:
                   type: string
                   enum: [Cash, Bank Transfer, Digital Wallet, Credit Card]
@@ -106,8 +97,7 @@ def initiate_transaction():
                   type: number
                   description: Transaction amount
               required:
-                - event_name
-                - owner_username
+                - ticket_id
                 - payment_method
                 - amount
       tags:
@@ -143,19 +133,13 @@ def initiate_transaction():
             return jsonify({"message": "Validation errors", "errors": errors}), 400
         
         current_user_id = get_current_user_id()
-        event_name = data['event_name']
-        owner_username = data['owner_username']
+        ticket_id = data['ticket_id']
         payment_method = data['payment_method']
         amount = data['amount']
 
-        # Get ticket by event name and owner username
-        ticket = ticket_service.get_ticket_by_event_and_owner(event_name, owner_username)
-        if not ticket:
-            return jsonify({"message": "Ticket not found"}), 404
-
         # Initiate transaction using service
         transaction = transaction_service.initiate_transaction(
-            ticket_id=ticket.TicketID,
+            ticket_id=ticket_id,
             buyer_id=current_user_id,
             amount=amount,
             payment_method=payment_method
@@ -317,12 +301,9 @@ def buy_ticket():
             schema:
               type: object
               properties:
-                event_name:
-                  type: string
-                  description: Name of the event
-                owner_username:
-                  type: string
-                  description: Username of the ticket owner
+                ticket_id:
+                  type: integer
+                  description: ID of the ticket to purchase
                 payment_method:
                   type: string
                   enum: [Cash, Bank Transfer, Digital Wallet, Credit Card]
@@ -331,8 +312,7 @@ def buy_ticket():
                   type: object
                   description: Additional payment method specific data
               required:
-                - event_name
-                - owner_username
+                - ticket_id
                 - payment_method
       tags:
         - Transactions
@@ -378,13 +358,12 @@ def buy_ticket():
             return jsonify({"message": "Validation errors", "errors": errors}), 400
 
         current_user_id = get_current_user_id()
-        event_name = data['event_name']
-        owner_username = data['owner_username']
+        ticket_id = data['ticket_id']
         payment_method = data['payment_method']
         payment_data = data.get('payment_data', {})
 
-        # Get ticket information by event name and owner username
-        ticket = ticket_service.get_ticket_by_event_and_owner(event_name, owner_username)
+        # Get ticket information
+        ticket = ticket_service.get_ticket(ticket_id)
         if not ticket:
             return jsonify({"message": "Ticket not found"}), 404
 
@@ -403,7 +382,7 @@ def buy_ticket():
 
         # Step 1: Initiate transaction
         transaction = transaction_service.initiate_transaction(
-            ticket_id=ticket.TicketID,
+            ticket_id=ticket_id,
             buyer_id=current_user_id,
             amount=ticket.Price,
             payment_method=payment_method
@@ -457,13 +436,12 @@ def buy_ticket():
                     amount=ticket.Price
                 )
 
-            logger.info(f"Ticket {ticket.TicketID} ({event_name} by {owner_username}) purchased successfully by user {current_user_id}")
+            logger.info(f"Ticket {ticket_id} purchased successfully by user {current_user_id}")
 
             return jsonify({
                 "transaction_id": transaction.TransactionID,
                 "payment_id": payment.PaymentID,
-                "event_name": event_name,
-                "owner_username": owner_username,
+                "ticket_id": ticket_id,
                 "status": "success",
                 "total_amount": ticket.Price,
                 "seller_earnings": earnings_breakdown['seller_earnings'],

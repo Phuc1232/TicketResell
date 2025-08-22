@@ -140,25 +140,54 @@ def me():
     user = user_service.get_user(user_id)
     return jsonify(response_schema.dump(user)), 200
 
-@bp.route('/<username>', methods=['GET'])
-def get_user_by_username(username):
+# Internal endpoint - keep ID-based
+@bp.route('/internal/<int:user_id>', methods=['GET'])
+def get_user_by_id(user_id):
     """
-    Get user by username
+    Get user by ID (Internal use)
     ---
     get:
-      summary: Get user by username
+      summary: Get user by ID (Internal use)
+      parameters:
+        - name: user_id
+          in: path
+          required: true
+          schema:
+            type: integer
+          description: ID of the user to get
+      tags:
+        - Users
+      responses:
+        200:
+          description: User info
+        404:
+          description: User not found
+    """
+    user = user_service.get_user(user_id)
+    if not user:
+        return jsonify({"message": "User not found"}), 404
+    return jsonify(response_schema.dump(user)), 200
+
+# Public endpoint - use username
+@bp.route('/profile/<username>', methods=['GET'])
+def get_user_profile(username):
+    """
+    Get user profile by username (Public)
+    ---
+    get:
+      summary: Get user profile by username
       parameters:
         - name: username
           in: path
           required: true
           schema:
             type: string
-          description: Username of the user to get
+          description: Username of the user
       tags:
         - Users
       responses:
         200:
-          description: User info
+          description: User profile
           content:
             application/json:
               schema:
@@ -170,6 +199,52 @@ def get_user_by_username(username):
     if not user:
         return jsonify({"message": "User not found"}), 404
     return jsonify(response_schema.dump(user)), 200
+
+@bp.route('/<username>/tickets', methods=['GET'])
+def get_user_tickets(username):
+    """
+    Get tickets owned by user (Public)
+    ---
+    get:
+      summary: Get tickets owned by user
+      parameters:
+        - name: username
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Username of the ticket owner
+      tags:
+        - Users
+      responses:
+        200:
+          description: List of user's tickets
+        404:
+          description: User not found
+    """
+    user = user_service.get_user_by_username(username)
+    if not user:
+        return jsonify({"message": "User not found"}), 404
+
+    # Get tickets owned by this user
+    from services.ticket_service import TicketService
+    from infrastructure.repositories.ticket_repository import TicketRepository
+    from infrastructure.databases.mssql import session
+
+    ticket_service = TicketService(TicketRepository(session))
+    tickets = ticket_service.get_tickets_by_owner(user.id)
+
+    from api.schemas.ticket import TicketResponseSchema
+    ticket_schema = TicketResponseSchema(many=True)
+
+    return jsonify({
+        "user": {
+            "username": user.username,
+            "id": user.id
+        },
+        "tickets": ticket_schema.dump(tickets),
+        "total_tickets": len(tickets)
+    }), 200
 
 @bp.route('/me', methods=['PUT'])
 @jwt_required()
@@ -300,24 +375,24 @@ def rate_user(target_user_id):
     except Exception as e:
         return jsonify({"message": "Error rating user", "error": str(e)}), 500
 
-@bp.route('/<username>', methods=['DELETE'])
+@bp.route('/<int:user_id>', methods=['DELETE'])
 @jwt_required()
 @delete_permission_required
-def delete_user(username):
+def delete_user(user_id):
     """
-    Delete a user by username (Admin only)
+    Delete a user by ID (Admin only)
     ---
     delete:
-      summary: Delete a user by username (Admin only)
+      summary: Delete a user by ID (Admin only)
       security:
         - BearerAuth: []
       parameters:
-        - name: username
+        - name: user_id
           in: path
           required: true
           schema:
-            type: string
-          description: Username of the user to delete
+            type: integer
+          description: ID of the user to delete
       tags:
         - Users
       responses:
@@ -343,12 +418,7 @@ def delete_user(username):
                     type: string
     """
     try:
-        # Get user by username first
-        user = user_service.get_user_by_username(username)
-        if not user:
-            return jsonify({"message": "User not found"}), 404
-
-        user_service.delete_user(user.id)
+        user_service.delete_user(user_id)
         return '', 204
     except ValueError as e:
         return jsonify({"message": str(e)}), 404

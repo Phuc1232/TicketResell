@@ -8,6 +8,7 @@ from flasgger import Swagger
 from config import SwaggerConfig
 from flask_swagger_ui import get_swaggerui_blueprint
 from api.routes import register_routes
+from cors import init_cors
 import logging
 
 # Load environment variables from .env file
@@ -64,6 +65,9 @@ def create_app():
 
     app.config["JWT_SECRET_KEY"] = "super-secret"  # đổi thành key bảo mật
     JWTManager(app)
+    
+    # Khởi tạo CORS
+    init_cors(app)
     
     # Đăng ký tất cả routes từ routes.py
     register_routes(app)

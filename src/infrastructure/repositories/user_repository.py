@@ -166,16 +166,44 @@ class UserRepository(IUserRepository):
             total_messages_deleted = ticket_messages_deleted + user_messages_deleted
             logger.info(f"Deleted {total_messages_deleted} messages for user {user_id} (ticket-related: {ticket_messages_deleted}, user-related: {user_messages_deleted})")
 
-            # Now delete tickets owned by user (after messages are deleted)
-            tickets_deleted = self.session.query(TicketModel).filter_by(OwnerID=user_id).delete()
-            logger.info(f"Deleted {tickets_deleted} tickets for user {user_id}")
+            # Delete payments and transactions involving user (BEFORE deleting tickets)
+            from infrastructure.models.payment_model import PaymentModel
+            from infrastructure.models.earning_model import EarningModel
 
-            # Delete transactions involving user
+            # First get all transactions involving this user
+            user_transactions = self.session.query(TransactionModel).filter(
+                (TransactionModel.BuyerID == user_id) |
+                (TransactionModel.SellerID == user_id)
+            ).all()
+
+            # Delete payments related to these transactions
+            payments_deleted = 0
+            earnings_deleted = 0
+            for transaction in user_transactions:
+                # Delete payments for this transaction
+                payments_deleted += self.session.query(PaymentModel).filter_by(
+                    TransactionID=transaction.TransactionID
+                ).delete()
+
+                # Delete earnings for this user (by date range around transaction)
+                # Since earnings don't have TransactionID FK, we delete by UserID
+                if transaction.SellerID == user_id:
+                    earnings_deleted += self.session.query(EarningModel).filter_by(
+                        UserID=user_id
+                    ).delete()
+
+            logger.info(f"Deleted {payments_deleted} payments and {earnings_deleted} earnings for user {user_id}")
+
+            # Now delete transactions involving user
             transactions_deleted = self.session.query(TransactionModel).filter(
                 (TransactionModel.BuyerID == user_id) |
                 (TransactionModel.SellerID == user_id)
             ).delete()
             logger.info(f"Deleted {transactions_deleted} transactions for user {user_id}")
+
+            # NOW delete tickets owned by user (after transactions are deleted)
+            tickets_deleted = self.session.query(TicketModel).filter_by(OwnerID=user_id).delete()
+            logger.info(f"Deleted {tickets_deleted} tickets for user {user_id}")
 
             # Delete notifications for user
             notifications_deleted = self.session.query(NotificationModel).filter_by(UserID=user_id).delete()
