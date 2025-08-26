@@ -170,17 +170,10 @@ d. Chức năng cho Cổng thanh toán:
  Bảng 3-3 : Biểu đồ quản lý vé
 </div>
 
-# 2.6 Thiết kế cơ sỡ dữ liệu
-# 2.6.1 Mô hình ERD
+# 2.6 Mô Hình ERD
 <img width="1357" height="685" alt="image" src="https://github.com/user-attachments/assets/f7d0aaf8-b4a8-4eb9-8d44-6bf6bb53a509" />
 <div align="center">
  Bảng 4 : Biểu đồ ERD
-</div>
-
-# 2.6.2 Mô hình cơ sở dữ liệu
-<img width="883" height="735" alt="image" src="https://github.com/user-attachments/assets/c6710290-fa19-498b-909f-6d91a28e6fe0" />
-<div align="center">
- Bảng 4-1 : Biểu đồ CSDL
 </div>
 
 # III. Yêu cầu phi chức năng
@@ -332,22 +325,36 @@ Sơ đồ:
 
  
 
-Mô hình cơ sở dữ liệu
+# Mô hình cơ sở dữ liệu
 Cơ sở dữ liệu sẽ bao gồm các bảng sau:
+- Users: Bảng trung tâm, lưu trữ mọi thông tin về người dùng như tên, số điện thoại, email, mật khẩu, ngày sinh, và trạng thái tài khoản. Mỗi người dùng có một UserID duy nhất.
 
-Users: Lưu thông tin người dùng, bao gồm tên, email, mật khẩu, quyền...
+- Role: Xác định vai trò của người dùng trong hệ thống (ví dụ: quản trị viên, người bán, người mua). Bảng này liên kết với bảng Users qua RoleID.
 
-Appointments: Lịch hẹn, bao gồm thông tin khách hàng, đặt vé, thời gian...
+- Ticket: Lưu trữ thông tin về vé được mua, bao gồm tên sự kiện, ngày diễn ra, giá và trạng thái.
 
-Services: Dịch vụ, bao gồm tên, mô tả, giá cả...
+- Transactions: Ghi lại lịch sử các giao dịch mua vé. Mỗi giao dịch được liên kết với một người dùng (UserID) và một vé (TicketID).
 
-Member: ……….
+- Payment: Chứa thông tin chi tiết về việc thanh toán cho một giao dịch, như phương thức thanh toán, số tiền và trạng thái thanh toán.
 
-Đặt vé: Thông tin đặt vé, bao gồm địa chỉ, số điện thoại, giờ mở cửa...
+- Earning: Theo dõi doanh thu, có thể là của người bán (SellerId), với tổng số tiền và ngày cập nhật.
+
+- Message: Lưu trữ nội dung các tin nhắn do người dùng gửi.
+
+- Notifications: Quản lý các thông báo gửi đến người dùng.
+
+- FeedBack: Cho phép người dùng để lại đánh giá, bình luận và xếp hạng cho một giao dịch đã hoàn tất.
+
+- Support: Quản lý các yêu cầu hỗ trợ từ người dùng, bao gồm mô tả vấn đề và trạng thái xử lý.
+
+- Đặt vé: Thông tin đặt vé, bao gồm địa chỉ, số điện thoại, giờ mở cửa...
 
 Sơ đồ CSDL:
+ <img width="883" height="735" alt="image" src="https://github.com/user-attachments/assets/c6710290-fa19-498b-909f-6d91a28e6fe0" />
+<div align="center">
+ Bảng 5 : Biểu đồ CSDL
+</div>
 
- 
 
 Giao diện người dùng
 Giao diện người dùng sẽ bao gồm các trang sau:
