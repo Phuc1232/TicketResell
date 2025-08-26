@@ -153,19 +153,19 @@ d. Chức năng cho Cổng thanh toán:
 </div>
 
 # 2.5.2 Luồng xử lý mua vé
-<img width="1068" height="789" alt="image" src="https://github.com/user-attachments/assets/914aebbd-383d-4d0b-ba48-667c8ab944a9" />
+<img width="1281" height="799" alt="image" src="https://github.com/user-attachments/assets/d51022ca-0a33-42d8-b678-050cdff49296" />
 <div align="center">
  Bảng 3-2 : Biểu đồ mua vé
 </div>
 
 # 2.5.3 Luồng xử lý bán vé
-<img width="1190" height="774" alt="image" src="https://github.com/user-attachments/assets/660e9b35-34fc-4768-8aa9-83ac1e039c0f" />
+<img width="1706" height="666" alt="image" src="https://github.com/user-attachments/assets/b086376f-d9c2-4c00-a29a-357336b39523" />
 <div align="center">
  Bảng 3-2 : Biểu đồ bán vé
 </div>
 
 # 2.5.4 Luồng xử lý quản lý vé
-<img width="1015" height="722" alt="image" src="https://github.com/user-attachments/assets/03266bb4-b98b-468b-aca5-33cb0d07c9ad" />
+<img width="1818" height="660" alt="image" src="https://github.com/user-attachments/assets/5086cf2e-5b48-4e2a-99b9-12647ce7031d" />
 <div align="center">
  Bảng 3-3 : Biểu đồ quản lý vé
 </div>
