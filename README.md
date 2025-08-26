@@ -294,7 +294,7 @@ Danh sách của bạn đã rất đầy đủ và chính xác. Tối ưu cho k�
 - Quản lý nội dung: Phải có giao diện quản trị để kiểm duyệt các sự kiện được đăng, quản lý người dùng, và xem báo cáo.
 
 # IV. Công nghệ sử dụng
-- Frontend: ReactJS JavaScript
+- Frontend: Sử dụng React ,JavaScript ,Nodejs ,Figma để xây dựng giao diện người dùng.
 
 - Backend: Flask Api , Python
 
@@ -302,7 +302,7 @@ Danh sách của bạn đã rất đầy đủ và chính xác. Tối ưu cho k�
 
 - Cơ sở dữ liệu: Sử dụng SQL Server để lưu trữ dữ liệu.
 
-- Bảo mật: Sử dụng ……………. để xác thực người dùng.
+- Bảo mật: Sử dụng Rest Api. để xác thực người dùng.
 
 - Thông báo: Sử dụng email để thông báo cho người dùng.
 
