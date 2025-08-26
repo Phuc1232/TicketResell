@@ -149,22 +149,18 @@ d. Chức năng cho Cổng thanh toán:
 
 ```plantuml
 @startuml
-' --- Tiêu đề của sơ đồ ---
 title Sơ đồ sequence: Chức năng đăng ký
 
-' --- Tùy chỉnh giao diện (tùy chọn) ---
 skinparam sequenceActorStyle awesome
 skinparam participantPadding 20
 skinparam boxPadding 10
 
-' --- Định nghĩa các thành phần tham gia ---
 actor "Khách" as Khach
 participant "1.1\nXác nhận yêu cầu" as P1
 participant "1.2\nXác thực và Hiện Thị" as P2
 database "D1 User" as D1
 database "D6 Notifications" as D6
 
-' --- Bắt đầu luồng sự kiện ---
 Khach -> P1: Gửi yêu cầu đăng ký
 activate P1
 P1 --> Khach: Gửi form đăng ký
