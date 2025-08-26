@@ -350,7 +350,9 @@ Cơ sở dữ liệu sẽ bao gồm các bảng sau:
 - Đặt vé: Thông tin đặt vé, bao gồm địa chỉ, số điện thoại, giờ mở cửa...
 
 Sơ đồ CSDL:
- <img width="883" height="735" alt="image" src="https://github.com/user-attachments/assets/c6710290-fa19-498b-909f-6d91a28e6fe0" />
+
+<img width="883" height="735" alt="image" src="https://github.com/user-attachments/assets/c6710290-fa19-498b-909f-6d91a28e6fe0" />
+
 <div align="center">
  Bảng 5 : Biểu đồ CSDL
 </div>
