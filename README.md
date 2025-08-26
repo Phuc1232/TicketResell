@@ -146,7 +146,48 @@ d. Chức năng cho Cổng thanh toán:
 
 # 2.5 Luồng xử lý chi tiết
 # 2.5.1 Luồng xử lý đăng ký
-<img width="954" height="624" alt="image" src="https://github.com/user-attachments/assets/7f7450f3-86f6-4f7d-94e4-6b18ee1c0d08" />
+
+```plantuml
+@startuml
+' --- Tiêu đề của sơ đồ ---
+title Sơ đồ sequence: Chức năng đăng ký
+
+' --- Tùy chỉnh giao diện (tùy chọn) ---
+skinparam sequenceActorStyle awesome
+skinparam participantPadding 20
+skinparam boxPadding 10
+
+' --- Định nghĩa các thành phần tham gia ---
+actor "Khách" as Khach
+participant "1.1\nXác nhận yêu cầu" as P1
+participant "1.2\nXác thực và Hiện Thị" as P2
+database "D1 User" as D1
+database "D6 Notifications" as D6
+
+' --- Bắt đầu luồng sự kiện ---
+Khach -> P1: Gửi yêu cầu đăng ký
+activate P1
+P1 --> Khach: Gửi form đăng ký
+deactivate P1
+
+Khach -> P2: Gửi thông tin từ form
+activate P2
+
+P2 -> D1: Ghi thông tin người dùng
+activate D1
+D1 --> P2: Phản hồi ghi thành công
+deactivate D1
+
+P2 -> D6: Ghi thông báo
+activate D6
+D6 --> P2: Phản hồi ghi thành công
+deactivate D6
+
+P2 --> Khach: Thông báo kết quả đăng ký
+deactivate P2
+@enduml
+```
+
 <div align="center">
  Bảng 3-1 : Biểu đồ đăng ký
 </div>
