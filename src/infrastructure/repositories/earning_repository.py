@@ -14,15 +14,22 @@ class EarningRepository(IEarningRepository):
             self.session = session
 
     def add(self, earning: Earning) -> Earning:
-        model = EarningModel(
-            UserID=earning.UserID,
-            TotalAmount=earning.TotalAmount,
-            Date=earning.Date
-        )
-        self.session.add(model)
-        self.session.commit()
-        self.session.refresh(model)
-        return self._to_domain(model)
+        try:
+            model = EarningModel(
+                UserID=earning.UserID,
+                TotalAmount=earning.TotalAmount,
+                Date=earning.Date
+            )
+            self.session.add(model)
+            self.session.commit()
+            self.session.refresh(model)
+            return self._to_domain(model)
+        except Exception as e:
+            self.session.rollback()
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Error adding earning for user {earning.UserID}: {str(e)}")
+            raise
     
     def get_by_id(self, earning_id: int) -> Optional[Earning]:
         model = self.session.query(EarningModel).filter(EarningModel.EarningID == earning_id).first()
@@ -33,23 +40,38 @@ class EarningRepository(IEarningRepository):
         return [self._to_domain(model) for model in models]
     
     def update(self, earning: Earning) -> Earning:
-        model = self.session.query(EarningModel).filter(EarningModel.EarningID == earning.EarningID).first()
-        if model:
+        try:
+            model = self.session.query(EarningModel).filter(EarningModel.EarningID == earning.EarningID).first()
+            if not model:
+                raise ValueError("Earning not found")
+            
             model.UserID = earning.UserID
             model.TotalAmount = earning.TotalAmount
             model.Date = earning.Date
             self.session.commit()
             self.session.refresh(model)
             return self._to_domain(model)
-        return None
+        except Exception as e:
+            self.session.rollback()
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Error updating earning {earning.EarningID}: {str(e)}")
+            raise
     
     def delete(self, earning_id: int) -> bool:
-        model = self.session.query(EarningModel).filter(EarningModel.EarningID == earning_id).first()
-        if model:
-            self.session.delete(model)
-            self.session.commit()
-            return True
-        return False
+        try:
+            model = self.session.query(EarningModel).filter(EarningModel.EarningID == earning_id).first()
+            if model:
+                self.session.delete(model)
+                self.session.commit()
+                return True
+            return False
+        except Exception as e:
+            self.session.rollback()
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Error deleting earning {earning_id}: {str(e)}")
+            raise
     
     def get_total_earnings_by_user(self, user_id: int) -> float:
         result = self.session.query(func.sum(EarningModel.TotalAmount)).filter(EarningModel.UserID == user_id).scalar()

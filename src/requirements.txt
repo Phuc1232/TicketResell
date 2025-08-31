@@ -15,3 +15,4 @@ Flask-JWT-Extended
 Werkzeug
 flask-dotenv
 flask_socketio
+requests

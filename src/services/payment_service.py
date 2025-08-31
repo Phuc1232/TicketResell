@@ -3,17 +3,21 @@ from domain.models.payment import Payment
 from domain.models.ipayment_repository import IPaymentRepository
 from domain.models.iuser_repository import IUserRepository
 from domain.models.itransaction_repository import ITransactionRepository
+from domain.models.itticket_repository import ITicketRepository
 from datetime import datetime, timedelta
 import uuid
 import logging
+from utils.momo_payment_gateway import MomoPaymentGateway
+from config import Config
 
 logger = logging.getLogger(__name__)
 
 class PaymentService:
-    def __init__(self, payment_repository: IPaymentRepository, user_repository: IUserRepository, transaction_repository: ITransactionRepository):
+    def __init__(self, payment_repository: IPaymentRepository, user_repository: IUserRepository, transaction_repository: ITransactionRepository, ticket_repository: ITicketRepository = None):
         self.payment_repository = payment_repository
         self.user_repository = user_repository
         self.transaction_repository = transaction_repository
+        self.ticket_repository = ticket_repository
     
     def create_payment(self, methods: str, amount: float, user_id: int, title: str, transaction_id: Optional[int] = None) -> Payment:
         # Validate user exists
@@ -104,13 +108,18 @@ class PaymentService:
 
             logger.info(f"Payment {payment_id} processed with status: {result['status']}")
 
-            return {
+            response_data = {
                 'payment_id': payment_id,
                 'status': result['status'],
                 'message': result['message'],
                 'transaction_reference': result.get('transaction_reference'),
                 'payment': updated_payment
             }
+
+            if result['status'] == 'pending' and 'payment_url' in result:
+                response_data['payment_url'] = result['payment_url']
+
+            return response_data
 
         except Exception as e:
             logger.error(f"Payment processing failed for payment {payment_id}: {e}")
@@ -161,12 +170,77 @@ class PaymentService:
 
     def _process_digital_wallet(self, payment: Payment, payment_data: Dict[str, Any]) -> Dict[str, Any]:
         """Process digital wallet payment"""
-        # In real implementation, integrate with wallet API (Momo, ZaloPay, etc.)
-        return {
-            'status': 'success',
-            'message': 'Digital wallet payment completed',
-            'transaction_reference': f"WALLET_{uuid.uuid4().hex[:8].upper()}"
-        }
+        wallet_type = payment_data.get('wallet_type', '').lower()
+        
+        if wallet_type == 'momo':
+            bank_code = payment_data.get('bank_code')
+            card_token = payment_data.get('card_token')
+            return self._process_momo_payment(payment, payment_data, bank_code, card_token)
+        else:
+            # Fallback for other wallet types or when not specified
+            logger.warning(f"Unknown wallet type: {wallet_type}, using default implementation")
+            return {
+                'status': 'pending',
+                'message': 'Digital wallet payment initiated',
+                'transaction_reference': f"WALLET_{uuid.uuid4().hex[:8].upper()}"
+            }
+            
+    def _process_momo_payment(self, payment: Payment, payment_data: Dict[str, Any], bank_code: Optional[str] = None, card_token: Optional[str] = None) -> Dict[str, Any]:
+        """Process MoMo payment"""
+        try:
+            # Initialize MoMo gateway
+            momo_gateway = MomoPaymentGateway(
+                partner_code=Config.MOMO_PARTNER_CODE,
+                access_key=Config.MOMO_ACCESS_KEY,
+                secret_key=Config.MOMO_SECRET_KEY,
+                api_endpoint=Config.MOMO_API_ENDPOINT
+            )
+            
+            # Generate unique order ID
+            order_id = f"ORDER_{payment.PaymentID}_{uuid.uuid4().hex.upper()}"
+            
+            # Create payment request
+            request_start_time = datetime.now()
+            logger.debug(f"MoMo payment request details: order_id={order_id}, amount={payment.amount}, order_info={payment.Title}, return_url={Config.MOMO_RETURN_URL}, notify_url={Config.MOMO_NOTIFY_URL}. Request initiated at: {request_start_time}")
+            momo_response = momo_gateway.create_payment_request(
+                order_id=order_id,
+                amount=int(payment.amount),  # MoMo requires integer amount
+                order_info=f"Payment for {payment.Title}",
+                return_url=Config.MOMO_RETURN_URL,
+                notify_url=Config.MOMO_NOTIFY_URL,
+                extra_data=str(payment.PaymentID),  # Store payment ID for reference
+                bank_code=bank_code,
+                card_token=card_token
+            )
+            logger.debug(f"Payment Title: {payment.Title}")
+
+            request_end_time = datetime.now()
+            time_taken = (request_end_time - request_start_time).total_seconds()
+            logger.debug(f"MoMo payment request for order {order_id} completed in {time_taken:.2f} seconds. Response: {momo_response}")
+            logger.debug(f"MoMo API Response: {momo_response}")
+            if momo_response and momo_response.get('resultCode') == 0 and momo_response.get('payUrl'):
+                return {
+                    'status': 'pending',
+                    'message': 'MoMo payment initiated successfully',
+                    'transaction_reference': momo_response.get('orderId'),
+                    'payment_url': momo_response.get('payUrl')
+                }
+            else:
+                logger.error(f"MoMo payment initiation failed: {momo_response.get('message', 'Unknown error')}")
+                return {
+                    'status': 'failed',
+                    'message': momo_response.get('message', 'MoMo payment initiation failed'),
+                    'transaction_reference': momo_response.get('orderId')
+                }
+
+        except Exception as e:
+            logger.error(f"Error processing MoMo payment: {e}")
+            return {
+                'status': 'failed',
+                'message': f"Error processing MoMo payment: {e}"
+            }
+                
+
 
     def _process_credit_card(self, payment: Payment, payment_data: Dict[str, Any]) -> Dict[str, Any]:
         """Process credit card payment"""
@@ -226,6 +300,64 @@ class PaymentService:
         pending_payments = len([p for p in payments if p.Status == 'pending'])
 
         total_amount = sum(p.amount for p in payments if p.Status == 'success')
+        
+        return {
+            'total_payments': total_payments,
+            'successful_payments': successful_payments,
+            'failed_payments': failed_payments,
+            'pending_payments': pending_payments,
+            'total_amount': total_amount
+        }
+        
+    def update_transaction_reference(self, transaction_id: int, reference: str) -> Any:
+        """
+        Update transaction reference with payment gateway reference
+        
+        Args:
+            transaction_id: Transaction ID
+            reference: Payment gateway reference (e.g., MoMo transaction ID)
+            
+        Returns:
+            Updated transaction
+        """
+        transaction = self.transaction_repository.get_by_id(transaction_id)
+        if not transaction:
+            raise ValueError(f"Transaction not found with ID: {transaction_id}")
+            
+        transaction.ReferenceNumber = reference
+        updated_transaction = self.transaction_repository.update(transaction)
+        
+        logger.info(f"Updated transaction {transaction_id} with reference {reference}")
+        return updated_transaction
+        
+    def complete_transaction(self, transaction_id: int) -> Any:
+        """
+        Complete a transaction after successful payment
+        
+        Args:
+            transaction_id: Transaction ID
+            
+        Returns:
+            Updated transaction
+        """
+        transaction = self.transaction_repository.get_by_id(transaction_id)
+        if not transaction:
+            raise ValueError(f"Transaction not found with ID: {transaction_id}")
+            
+        # Update transaction status
+        transaction.Status = 'completed'
+        updated_transaction = self.transaction_repository.update(transaction)
+        
+        # If this is a ticket purchase, update ticket status
+        if transaction.TicketID:
+            ticket = self.ticket_repository.get_by_id(transaction.TicketID)
+            if ticket:
+                ticket.Status = 'sold'
+                self.ticket_repository.update(ticket)
+                logger.info(f"Updated ticket {ticket.TicketID} status to 'sold'")
+            
+        logger.info(f"Completed transaction {transaction_id}")
+        return updated_transaction
 
         # Payment method breakdown
         method_stats = {}
@@ -246,3 +378,137 @@ class PaymentService:
             'success_rate': (successful_payments / total_payments * 100) if total_payments > 0 else 0,
             'method_breakdown': method_stats
         }
+
+
+    def handle_momo_callback(self, callback_data: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Handle callback from MoMo payment gateway and update payment status
+
+        Args:
+            callback_data: Callback data from MoMo
+
+        Returns:
+            Dict with processing result
+        """
+        logger.info(f"Received MoMo payment callback: {callback_data}")
+
+        try:
+            # Initialize MoMo gateway
+            momo_gateway = MomoPaymentGateway(
+                partner_code=Config.MOMO_PARTNER_CODE,
+                access_key=Config.MOMO_ACCESS_KEY,
+                secret_key=Config.MOMO_SECRET_KEY,
+                api_endpoint=Config.MOMO_API_ENDPOINT
+            )
+
+            # Process callback data
+            process_result = momo_gateway.process_payment_callback(callback_data)
+            
+            if not process_result['success']:
+                logger.error(f"MoMo callback processing failed: {process_result['message']}")
+                
+                # Nếu xử lý callback thất bại, kiểm tra xem có payment_id không
+                if 'payment_id' in process_result:
+                    payment_id = int(process_result['payment_id'])
+                    payment = self.payment_repository.get_by_id(payment_id)
+                    
+                    if payment and payment.TransactionID:
+                        # Cập nhật trạng thái payment thành 'failed'
+                        payment.Status = 'failed'
+                        self.payment_repository.update(payment)
+                        
+                        # Cập nhật trạng thái transaction và vé
+                        transaction = self.transaction_repository.get_by_id(payment.TransactionID)
+                        if transaction:
+                            transaction.Status = 'failed'
+                            self.transaction_repository.update(transaction)
+                            
+                            # Lấy thông tin vé và cập nhật trạng thái thành 'Available'
+                            ticket = self.ticket_repository.get_by_id(transaction.TicketID)
+                            if ticket:
+                                ticket.Status = 'Available'
+                                self.ticket_repository.update(ticket)
+                                logger.info(f"Updated ticket {ticket.TicketID} status to 'Available' due to failed payment")
+                
+                return process_result
+
+            # Extract payment ID from callback data
+            payment_id = int(process_result['payment_id'])
+            transaction_id = process_result['transaction_id']
+
+            # Get payment from database
+            payment = self.payment_repository.get_by_id(payment_id)
+            if not payment:
+                error_msg = f"Payment not found with ID: {payment_id}"
+                logger.error(error_msg)
+                return {
+                    'success': False,
+                    'message': error_msg
+                }
+
+            # Update payment status based on error_code
+            if process_result.get('error_code', 0) == 0 and process_result.get('status') == 'success':
+                # Thanh toán thành công
+                payment.Status = 'success'
+                payment.Paid_at = datetime.now()
+                payment.transaction_reference = transaction_id
+                
+                # Update payment in database
+                updated_payment = self.payment_repository.update(payment)
+                
+                # If payment is associated with a transaction, update transaction status
+                if payment.TransactionID:
+                    transaction = self.transaction_repository.get_by_id(payment.TransactionID)
+                    if transaction:
+                        transaction.Status = 'paid'
+                        self.transaction_repository.update(transaction)
+                        logger.info(f"Updated transaction {transaction.TransactionID} status to 'paid'")
+                        
+                        # Cập nhật trạng thái vé thành 'Sold'
+                        ticket = self.ticket_repository.get_by_id(transaction.TicketID)
+                        if ticket:
+                            ticket.Status = 'Sold'
+                            self.ticket_repository.update(ticket)
+                            logger.info(f"Updated ticket {ticket.TicketID} status to 'Sold' due to successful payment")
+
+                logger.info(f"Successfully updated payment {payment_id} status to 'success'")
+                
+                return {
+                    'success': True,
+                    'message': 'Payment status updated successfully',
+                    'payment': updated_payment
+                }
+            else:
+                # Thanh toán thất bại
+                payment.Status = 'failed'
+                updated_payment = self.payment_repository.update(payment)
+                
+                # Nếu payment liên kết với transaction, cập nhật trạng thái transaction và vé
+                if payment.TransactionID:
+                    transaction = self.transaction_repository.get_by_id(payment.TransactionID)
+                    if transaction:
+                        transaction.Status = 'failed'
+                        self.transaction_repository.update(transaction)
+                        
+                        # Cập nhật trạng thái vé thành 'Available'
+                        ticket = self.ticket_repository.get_by_id(transaction.TicketID)
+                        if ticket:
+                            ticket.Status = 'Available'
+                            self.ticket_repository.update(ticket)
+                            logger.info(f"Updated ticket {ticket.TicketID} status to 'Available' due to failed payment")
+                
+                logger.info(f"Payment {payment_id} failed with error code: {process_result.get('error_code')}")
+                
+                return {
+                    'success': False,
+                    'message': f"Payment failed: {process_result.get('message', 'Unknown error')}",
+                    'payment': updated_payment
+                }
+
+        except Exception as e:
+            error_msg = f"Error handling MoMo callback: {e}"
+            logger.error(error_msg)
+            return {
+                'success': False,
+                'message': error_msg
+            }

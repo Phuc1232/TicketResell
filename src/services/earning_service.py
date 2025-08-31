@@ -101,7 +101,7 @@ class EarningService:
             'platform_commission_rate': platform_commission,
             'commission_amount': commission_amount,
             'seller_earnings': seller_earnings,
-            'net_percentage': (seller_earnings / transaction_amount) * 100
+            'net_percentage': (seller_earnings / transaction_amount) * 100 if transaction_amount != 0 else 0
         }
 
     def process_transaction_earnings(self, seller_id: int, transaction_amount: float, transaction_id: int = None) -> Earning:
@@ -197,6 +197,8 @@ class EarningService:
         trend = 'neutral'
         if previous_earnings_amount > 0:
             change_percentage = ((recent_earnings_amount - previous_earnings_amount) / previous_earnings_amount) * 100
+        else:
+            change_percentage = 0
             if change_percentage > 10:
                 trend = 'increasing'
             elif change_percentage < -10:

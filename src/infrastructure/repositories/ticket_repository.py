@@ -77,14 +77,21 @@ class TicketRepository(ITicketRepository):
 
     def update(self, ticket: Ticket) -> Ticket:
         try:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.info(f"Updating ticket {ticket.TicketID} with status {ticket.Status}")
+            
             model = (
                 self.session.query(TicketModel)
                 .filter_by(TicketID=ticket.TicketID)
                 .first()
             )
             if not model:
+                logger.error(f"Ticket not found with ID: {ticket.TicketID}")
                 raise ValueError("Ticket not found")
 
+            logger.info(f"Current ticket status: {model.Status}, updating to: {ticket.Status}")
+            
             model.EventDate = ticket.EventDate
             model.Price = ticket.Price
             model.EventName = ticket.EventName
@@ -95,9 +102,13 @@ class TicketRepository(ITicketRepository):
 
             self.session.commit()
             self.session.refresh(model)
+            logger.info(f"Ticket {ticket.TicketID} updated successfully, new status: {model.Status}")
             return self._to_domain(model)
-        except Exception:
+        except Exception as e:
             self.session.rollback()
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Error updating ticket {ticket.TicketID}: {str(e)}")
             raise
         finally:
             self.session.close()

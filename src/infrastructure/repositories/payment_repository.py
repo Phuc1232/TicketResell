@@ -40,8 +40,18 @@ class PaymentRepository(IPaymentRepository):
         return self._to_domain(model) if model else None
     
     def update(self, payment: Payment) -> Payment:
-        model = self.session.query(PaymentModel).filter(PaymentModel.PaymentID == payment.PaymentID).first()
-        if model:
+        try:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.info(f"Updating payment {payment.PaymentID} with status {payment.Status}")
+            
+            model = self.session.query(PaymentModel).filter(PaymentModel.PaymentID == payment.PaymentID).first()
+            if not model:
+                logger.error(f"Payment not found with ID: {payment.PaymentID}")
+                raise ValueError("Payment not found")
+
+            logger.info(f"Current payment status: {model.Status}, updating to: {payment.Status}")
+            
             model.Methods = payment.Methods
             model.Status = payment.Status
             model.Paid_at = payment.Paid_at
@@ -49,10 +59,17 @@ class PaymentRepository(IPaymentRepository):
             model.UserID = payment.UserID
             model.Title = payment.Title
             model.TransactionID = payment.TransactionID
+            
             self.session.commit()
             self.session.refresh(model)
+            logger.info(f"Payment {payment.PaymentID} updated successfully, new status: {model.Status}")
             return self._to_domain(model)
-        return None
+        except Exception as e:
+            self.session.rollback()
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Error updating payment {payment.PaymentID}: {str(e)}")
+            raise
     
     def delete(self, payment_id: int) -> bool:
         model = self.session.query(PaymentModel).filter(PaymentModel.PaymentID == payment_id).first()

@@ -43,8 +43,18 @@ class TransactionRepository(ITransactionRepository):
         return [self._to_domain(model) for model in models]
 
     def update(self, transaction: Transaction) -> Transaction:
-        model = self.session.query(TransactionModel).filter(TransactionModel.TransactionID == transaction.TransactionID).first()
-        if model:
+        try:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.info(f"Updating transaction {transaction.TransactionID} with status {transaction.Status}")
+            
+            model = self.session.query(TransactionModel).filter(TransactionModel.TransactionID == transaction.TransactionID).first()
+            if not model:
+                logger.error(f"Transaction not found with ID: {transaction.TransactionID}")
+                raise ValueError("Transaction not found")
+
+            logger.info(f"Current transaction status: {model.Status}, updating to: {transaction.Status}")
+            
             model.TicketID = transaction.TicketID
             model.BuyerID = transaction.BuyerID
             model.SellerID = transaction.SellerID
@@ -55,8 +65,14 @@ class TransactionRepository(ITransactionRepository):
             model.UpdatedAt = datetime.now()
             self.session.commit()
             self.session.refresh(model)
+            logger.info(f"Transaction {transaction.TransactionID} updated successfully, new status: {model.Status}")
             return self._to_domain(model)
-        return transaction
+        except Exception as e:
+            self.session.rollback()
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Error updating transaction {transaction.TransactionID}: {str(e)}")
+            raise
     
     def delete(self, transaction_id: int) -> bool:
         model = self.session.query(TransactionModel).filter(TransactionModel.TransactionID == transaction_id).first()

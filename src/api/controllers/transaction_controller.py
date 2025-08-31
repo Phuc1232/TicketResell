@@ -1,5 +1,5 @@
 from flask import Blueprint, request, jsonify
-from flask_jwt_extended import jwt_required, get_jwt_identity
+from flask_jwt_extended import jwt_required
 from utils.jwt_helpers import get_current_user_id
 from marshmallow import Schema, fields, validate
 import uuid
@@ -39,16 +39,14 @@ earning_service = EarningService(earning_repository, user_repository)
 ticket_service = TicketService(ticket_repository)
 
 # Schemas
-class TransactionInitiateSchema(Schema):
+class BuyTicketSchema(Schema):
     ticket_id = fields.Int(required=True, validate=validate.Range(min=1),
-                          error_messages={"required": "Ticket ID is required",
-                                         "validator_failed": "Ticket ID must be a positive integer"})
-    payment_method = fields.Str(required=True, validate=validate.OneOf(['Cash', 'Bank Transfer', 'Digital Wallet', 'Credit Card']),
-                               error_messages={"required": "Payment method is required",
-                                              "validator_failed": "Payment method must be one of: Cash, Bank Transfer, Digital Wallet, Credit Card"})
-    amount = fields.Float(required=True, validate=validate.Range(min=0.01),
-                         error_messages={"required": "Amount is required",
-                                        "validator_failed": "Amount must be greater than 0"})
+                           error_messages={"required": "Ticket ID is required",
+                                          "validator_failed": "Ticket ID must be a positive integer"})
+    payment_method = fields.Str(required=True, validate=validate.OneOf(['Cash', 'Bank Transfer', 'Digital Wallet', 'Credit Card', 'Momo']),
+                                error_messages={"required": "Payment method is required",
+                                               "validator_failed": "Payment method must be one of: Cash, Bank Transfer, Digital Wallet, Credit Card, Momo"})
+    payment_data = fields.Dict(required=False, load_default={})
 
 class TransactionCallbackSchema(Schema):
     transaction_id = fields.Str(required=True)
@@ -56,13 +54,16 @@ class TransactionCallbackSchema(Schema):
     payment_transaction_id = fields.Str()
     error_message = fields.Str()
 
-class BuyTicketSchema(Schema):
+class TransactionInitiateSchema(Schema):
     ticket_id = fields.Int(required=True, validate=validate.Range(min=1),
                           error_messages={"required": "Ticket ID is required",
                                          "validator_failed": "Ticket ID must be a positive integer"})
-    payment_method = fields.Str(required=True, validate=validate.OneOf(['Cash', 'Bank Transfer', 'Digital Wallet', 'Credit Card']),
+    payment_method = fields.Str(required=True, validate=validate.OneOf(['Cash', 'Bank Transfer', 'Digital Wallet', 'Credit Card', 'Momo']),
                                error_messages={"required": "Payment method is required",
-                                              "validator_failed": "Payment method must be one of: Cash, Bank Transfer, Digital Wallet, Credit Card"})
+                                              "validator_failed": "Payment method must be one of: Cash, Bank Transfer, Digital Wallet, Credit Card, Momo"})
+    amount = fields.Float(required=True, validate=validate.Range(min=0.01),
+                         error_messages={"required": "Amount is required",
+                                        "validator_failed": "Amount must be greater than 0"})
     payment_data = fields.Dict(required=False, load_default={})
 
 transaction_initiate_schema = TransactionInitiateSchema()
@@ -222,22 +223,19 @@ def transaction_callback():
         )
 
         if status == "success":
-            # Get ticket and user information
-            ticket = ticket_service.get_ticket(transaction.TicketID)
-            buyer = user_repository.get_by_id(transaction.BuyerID)
-            seller = user_repository.get_by_id(transaction.SellerID)
-
-            if ticket and buyer and seller:
-                # Process seller earnings
+            try:
+                # QUAN TRỌNG: Luôn tạo earning khi thanh toán thành công
                 earning = earning_service.process_transaction_earnings(
                     seller_id=transaction.SellerID,
                     transaction_amount=transaction.Amount,
                     transaction_id=transaction.TransactionID
                 )
-
-
-
-                logger.info(f"Transaction {transaction_id} completed successfully. Seller earned ${earning.TotalAmount:.2f}")
+                logger.info(f"Transaction {transaction_id} completed successfully. Seller {transaction.SellerID} earned ${earning.TotalAmount:.2f}")
+                
+            except Exception as earning_error:
+                logger.error(f"CRITICAL: Failed to create earning for transaction {transaction_id}: {earning_error}")
+                # Vẫn tiếp tục nhưng log lỗi nghiêm trọng
+                pass
 
         elif status == "failed":
 
@@ -254,6 +252,113 @@ def transaction_callback():
     except Exception as e:
         logger.error(f"Error processing transaction callback: {e}")
         return jsonify({"message": "Error processing transaction callback", "error": str(e)}), 500
+
+
+@bp.route('/preview-transaction', methods=['POST'])
+@jwt_required()
+def preview_transaction():
+    """
+    Preview transaction details without reserving the ticket
+    ---
+    post:
+      summary: Preview transaction details without reserving the ticket
+      description: Provides a preview of the transaction, including ticket details and earnings breakdown, without creating a transaction or reserving the ticket.
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                ticket_id:
+                  type: integer
+                  description: ID of the ticket to preview
+              required:
+                - ticket_id
+      tags:
+        - Transactions
+      responses:
+        200:
+          description: Transaction preview successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ticket:
+                    type: object
+                    properties:
+                      id:
+                        type: integer
+                      event_name:
+                        type: string
+                      price:
+                        type: number
+                      event_date:
+                        type: string
+                        format: date-time
+                  earnings_breakdown:
+                    type: object
+                  available_payment_methods:
+                    type: array
+                    items:
+                      type: string
+                  message:
+                    type: string
+        400:
+          description: Invalid input or user cannot purchase their own ticket
+        404:
+          description: Ticket not found
+        409:
+          description: Ticket is not available for purchase
+    """
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({"message": "No data provided"}), 400
+
+        ticket_id = data.get('ticket_id')
+        if not ticket_id:
+            return jsonify({"message": "Ticket ID is required"}), 400
+
+        current_user_id = get_current_user_id()
+
+        # Get ticket information
+        ticket = ticket_service.get_ticket(ticket_id)
+        if not ticket:
+            return jsonify({"message": "Ticket not found"}), 404
+
+        if ticket.Status != "Available":
+            return jsonify({"message": "Ticket is not available for purchase"}), 409
+
+        # Prevent self-purchase
+        if ticket.OwnerID == current_user_id:
+            return jsonify({"message": "Cannot purchase your own ticket"}), 400
+
+        # Calculate earnings breakdown
+        earnings_breakdown = earning_service.calculate_seller_earnings(
+            user_id=ticket.OwnerID,
+            transaction_amount=ticket.Price
+        )
+
+        # Return preview information without creating transaction
+        return jsonify({
+            "ticket": {
+                "id": ticket.TicketID,
+                "event_name": ticket.EventName,
+                "price": ticket.Price,
+                "event_date": ticket.EventDate.isoformat() if ticket.EventDate else None
+            },
+            "earnings_breakdown": earnings_breakdown,
+            "available_payment_methods": ["Cash", "Bank Transfer", "Digital Wallet", "Credit Card", "Momo"],
+            "message": "Transaction preview successful"
+        }), 200
+
+    except Exception as e:
+        logger.error(f"Error previewing transaction: {e}")
+        return jsonify({"message": "Error previewing transaction", "error": str(e)}), 500
 
 
 @bp.route('/buy-ticket', methods=['POST'])
@@ -340,7 +445,9 @@ def buy_ticket():
         if not ticket:
             return jsonify({"message": "Ticket not found"}), 404
 
-        if ticket.Status != "Available":
+        # Kiểm tra trạng thái vé. Chỉ cho phép mua nếu vé đang ở trạng thái 'Available' hoặc 'Reserved'
+        # 'Reserved' là trạng thái tạm thời sau khi initiate_transaction
+        if ticket.Status not in ["Available", "Reserved"]:
             return jsonify({"message": "Ticket is not available for purchase"}), 409
 
         # Prevent self-purchase
@@ -353,12 +460,13 @@ def buy_ticket():
             transaction_amount=ticket.Price
         )
 
-        # Step 1: Initiate transaction
+        # Step 1: Initiate transaction and reserve the ticket
         transaction = transaction_service.initiate_transaction(
             ticket_id=ticket_id,
             buyer_id=current_user_id,
             amount=ticket.Price,
-            payment_method=payment_method
+            payment_method=payment_method,
+            reserve_ticket=True  # Explicitly reserve the ticket at this stage
         )
 
         # Step 2: Create payment record
@@ -373,7 +481,16 @@ def buy_ticket():
         # Step 3: Process payment
         payment_result = payment_service.process_payment(payment.PaymentID, payment_data)
 
-        if payment_result['status'] == 'success':
+        if payment_result['status'] == 'pending' and 'payment_url' in payment_result:
+            return jsonify({
+                "transaction_id": transaction.TransactionID,
+                "payment_id": payment.PaymentID,
+                "status": "pending",
+                "payment_url": payment_result['payment_url'],
+                "message": "Payment initiated, redirect to payment URL"
+            }), 200
+
+        elif payment_result['status'] == 'success':
             # Step 4: Complete transaction
             completed_transaction = transaction_service.process_transaction_callback(
                 transaction_id=transaction.TransactionID,
@@ -388,37 +505,32 @@ def buy_ticket():
                 transaction_id=transaction.TransactionID
             )
 
-
-
             logger.info(f"Ticket {ticket_id} purchased successfully by user {current_user_id}")
 
             return jsonify({
-                "transaction_id": transaction.TransactionID,
+                "message": "Ticket purchase completed successfully",
+                "transaction_id": completed_transaction.TransactionID,
                 "payment_id": payment.PaymentID,
                 "ticket_id": ticket_id,
-                "status": "success",
-                "total_amount": ticket.Price,
-                "seller_earnings": earnings_breakdown['seller_earnings'],
-                "commission_amount": earnings_breakdown['commission_amount'],
-                "payment_reference": payment_result.get('transaction_reference'),
-                "message": f"Successfully purchased ticket for {ticket.EventName}"
+                "status": completed_transaction.Status,
+                "total_amount": completed_transaction.Amount,
+                "seller_earnings": earning.TotalAmount,
+                "commission_amount": earnings_breakdown['commission_amount']
             }), 200
 
         else:
-            # Payment failed
+            # Handle other payment statuses (e.g., failed, cancelled)
+            logger.error(f"Payment for transaction {transaction.TransactionID} failed with status: {payment_result['status']}")
             transaction_service.process_transaction_callback(
                 transaction_id=transaction.TransactionID,
                 status="failed",
-                payment_transaction_id=payment_result.get('transaction_reference')
+                error_message=payment_result.get('message', 'Payment failed')
             )
-
-
-
             return jsonify({
-                "transaction_id": transaction.TransactionID,
+                "message": payment_result.get('message', 'Payment failed'),
                 "payment_id": payment.PaymentID,
                 "status": "failed",
-                "message": f"Payment failed: {payment_result['message']}"
+                "transaction_id": transaction.TransactionID
             }), 400
 
     except ValueError as e:

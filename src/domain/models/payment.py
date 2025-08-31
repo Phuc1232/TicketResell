@@ -11,7 +11,8 @@ class Payment:
         amount: float,
         UserID: int,
         Title: str,
-        TransactionID: Optional[int]
+        TransactionID: Optional[int],
+        transaction_reference: Optional[str] = None
     ):
         self.PaymentID = PaymentID
         self.Methods = Methods
@@ -21,3 +22,4 @@ class Payment:
         self.UserID = UserID
         self.Title = Title
         self.TransactionID = TransactionID
+        self.transaction_reference = transaction_reference

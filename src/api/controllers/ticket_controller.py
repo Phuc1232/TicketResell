@@ -197,7 +197,7 @@ def create_ticket():
         errors = request_schema.validate(data)
         if errors:
             return jsonify({"message": "Validation errors", "errors": errors}), 400
-        
+
         # Validate current user exists
         owner = user_service.get_user(current_user_id)
         if not owner:
@@ -306,6 +306,7 @@ def update_ticket(ticket_id):
                 - Price
                 - ContactInfo
                 - PaymentMethod
+                - Status
       tags:
         - Tickets
       responses:
@@ -363,26 +364,27 @@ def update_ticket(ticket_id):
         current_user_id = get_current_user_id()
 
         # Check if ticket exists and belongs to current user
-        existing_ticket = ticket_service.get_ticket_by_event_and_owner(event_name, owner_username)
+        existing_ticket = ticket_service.get_ticket(ticket_id)
         if not existing_ticket:
             return jsonify({'message': 'Ticket not found'}), 404
 
         if existing_ticket.OwnerID != current_user_id:
             return jsonify({"message": "Forbidden - Can only update your own tickets"}), 403
-        
-        # Add OwnerID to data (keep the same owner)
         data['OwnerID'] = current_user_id
             
         errors = request_schema.validate(data)
         if errors:
             return jsonify({"message": "Validation errors", "errors": errors}), 400
         
+        # Only update status if provided in request
+        status = data.get('Status', existing_ticket.Status)
+        
         ticket = ticket_service.update_ticket(
             ticket_id=existing_ticket.TicketID,
             EventName=data['EventName'],
             EventDate=data['EventDate'],
             Price=data['Price'],
-            Status=data['Status'],
+            Status=status,
             PaymentMethod=data['PaymentMethod'],
             ContactInfo=data['ContactInfo'],
             OwnerID=data['OwnerID']
