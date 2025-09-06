@@ -1,0 +1,58 @@
+# config.py
+import os
+from urllib.parse import quote_plus
+
+password = quote_plus("My12345678@")
+db_uri = os.environ.get("DATABASE_URI") or f"mssql+pymssql://sa:{password}@127.0.0.1:1433/DB"
+
+
+class Config:
+    """Base configuration."""
+    SECRET_KEY = os.environ.get("SECRET_KEY", "a_default_secret_key")
+    DEBUG = False
+    TESTING = False
+    DATABASE_URI = db_uri
+    CORS_HEADERS = "Content-Type"
+
+
+class DevelopmentConfig(Config):
+    DEBUG = True
+
+
+class TestingConfig(Config):
+    TESTING = True
+
+
+class ProductionConfig(Config):
+    pass
+
+
+class SwaggerConfig:
+    """Swagger configuration."""
+    template = {
+        "swagger": "2.0",
+        "info": {
+            "title": "Ticket API",
+            "description": "API for managing tickets and users",
+            "version": "1.0.0",
+        },
+        "basePath": "/",
+        "schemes": ["http", "https"],
+        "consumes": ["application/json"],
+        "produces": ["application/json"],
+    }
+
+    swagger_config = {
+        "headers": [],
+        "specs": [
+            {
+                "endpoint": "apispec",
+                "route": "/apispec.json",
+                "rule_filter": lambda rule: True,
+                "model_filter": lambda tag: True,
+            }
+        ],
+        "static_url_path": "/flasgger_static",
+        "swagger_ui": True,
+        "specs_route": "/docs",
+    }
