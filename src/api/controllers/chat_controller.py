@@ -100,14 +100,14 @@ def send_message():
         current_user_id = get_current_user_id()
         receiver_id = data['receiver_id']
         content = data['content']
-        ticket_id = data.get('ticket_id')
+        #ticket_id = data.get('ticket_id')
 
         # Use ChatService to send message
         message = chat_service.send_message(
             sender_id=current_user_id,
             receiver_id=receiver_id,
             content=content,
-            ticket_id=ticket_id
+            #ticket_id=ticket_id
         )
 
         return jsonify({
@@ -115,7 +115,7 @@ def send_message():
             "content": message.Content,
             "sender_id": message.SenderID,
             "receiver_id": message.ReceiverID,
-            "ticket_id": message.TicketID,
+            #"ticket_id": message.TicketID,
             "sent_at": message.SentAt.isoformat(),
             "message": "Message sent successfully"
         }), 201
