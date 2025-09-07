@@ -107,7 +107,7 @@ class AuthService:
         # Prepare response message
         message = 'Registration successful, please check your email for verification code'
         if self.email_service.debug_mode:
-            message += ' (Debug mode - email simulated)'
+            message ='Registration successful, but debug mode'
 
         response = {
             'user_id': created_user.id,
