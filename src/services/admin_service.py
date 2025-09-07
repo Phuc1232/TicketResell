@@ -90,7 +90,7 @@ class AdminService:
                     "role_name": "Admin" if user.role_id == 1 else "User",
                     "create_date": user.create_date.isoformat() if user.create_date else None,
                     "date_of_birth": user.date_of_birth.isoformat() if user.date_of_birth else None,
-                    "has_verification_pending": bool(user.verification_code),
+                    #"has_verification_pending": bool(user.verification_code),
                     "verification_expires_at": user.verification_expires_at.isoformat() if user.verification_expires_at else None
                 }
                 detailed_users.append(user_info)
