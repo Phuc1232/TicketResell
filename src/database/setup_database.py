@@ -8,7 +8,7 @@ import sys
 from typing import Dict, Any
 from database.seed_roles import seed_roles, verify_roles
 from database.seed_admin import seed_default_admin
-from database.fix_role_constraints import RoleConstraintFixer
+#from database.fix_role_constraints import RoleConstraintFixer
 from infrastructure.repositories.user_repository import UserRepository
 from infrastructure.databases.mssql import session
 
@@ -22,7 +22,7 @@ class DatabaseSetup:
     def __init__(self):
         """Initialize database setup"""
         self.user_repository = UserRepository(session)
-        self.constraint_fixer = RoleConstraintFixer(session)
+        #self.constraint_fixer = RoleConstraintFixer(session)
     
     def setup_complete_database(self) -> Dict[str, Any]:
         """
