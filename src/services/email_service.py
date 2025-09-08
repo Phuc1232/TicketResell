@@ -179,7 +179,7 @@ class EmailService:
                     <p>Or copy and paste this link into your browser:</p>
                     <p>{reset_url}</p>
                     
-                    <p class="warning">⚠️ This link will expire in 15 minutes for security reasons.</p>
+                    <p class="warning">This link will expire in 15 minutes for security reasons.</p>
                     
                     <p>If you didn't request a password reset, please ignore this email. Your password will remain unchanged.</p>
                     
